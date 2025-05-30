@@ -1,0 +1,956 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Link } from "react-router-dom"
+import { motion, AnimatePresence } from "framer-motion"
+import { Users, Search, Trash2, Edit, MoreHorizontal, Filter, RefreshCw, CheckCircle, AlertTriangle, Loader2, UserPlus } from 'lucide-react'
+
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "@/hooks/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+// Import API functions
+import { getAllUsers, createUser, deleteUser } from "../../apis/admin"
+import { getRecentUsers } from "../../apis/userApi"
+
+// Add the import at the top with the other imports
+import MainLayout from "../../components/MainLayout"
+
+// Animation variants
+const fadeIn = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.4 } },
+}
+
+const slideUp = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
+}
+
+const tableRowVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: (i) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      delay: i * 0.05,
+      duration: 0.3,
+    },
+  }),
+  exit: { opacity: 0, transition: { duration: 0.2 } },
+}
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
+}
+
+// Role categories for organization based on the backend roles
+const roleCategories = {
+  Management: ["Admin", "Manager", "Project Manager", "Business Manager", "Financial Leader"],
+  Engineering: [
+    "Manufacturing Eng. Manager",
+    "Manufacturing Eng. Leader",
+    "Tooling Manager",
+    "Automation Leader",
+    "SAP Leader",
+    "Methodes UAP1&3",
+    "Methodes UAP2",
+  ],
+  Logistics: [
+    "Logistic Manager",
+    "Logistic Leader UAP1",
+    "Logistic Leader UAP2",
+    "Logistic Leader",
+    "POE Administrator",
+    "Material Administrator",
+    "Warehouse Leader UAP1",
+    "Warehouse Leader UAP2",
+    "LOGISTICA",
+  ],
+  Production: ["Prod. Plant Manager UAP1", "Prod. Plant Manager UAP2", "PRODUCCION"],
+  Quality: [
+    "Quality Manager",
+    "Quality Leader UAP1",
+    "Quality Leader UAP2",
+    "Quality Leader UAP3",
+    "Laboratory Leader",
+  ],
+  Other: ["Customer", "User", "Maintenance Manager", "Maintenance Leader UAP2", "Purchasing Manager"],
+}
+
+// All roles flattened
+const allRoles = Object.values(roleCategories).flat()
+
+export default function AdminDashboard() {
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [searchTerm, setSearchTerm] = useState("")
+  const [roleFilter, setRoleFilter] = useState("all")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [activeTab, setActiveTab] = useState("all-users")
+  const [refreshing, setRefreshing] = useState(false)
+  const [recentUsers, setRecentUsers] = useState([])
+
+  const [newUserData, setNewUserData] = useState({
+    license: "",
+    username: "",
+    email: "",
+    password: "",
+    roles: ["User"],
+  })
+
+  const ITEMS_PER_PAGE = 10
+
+  // Fetch users when component mounts or page changes
+  useEffect(() => {
+    fetchUsers()
+  }, [currentPage])
+
+  // Fetch recent users for stats
+  useEffect(() => {
+    fetchRecentUsers()
+  }, [])
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true)
+      const response = await getAllUsers(currentPage, ITEMS_PER_PAGE)
+      setUsers(response.users)
+      setTotalPages(response.pagination.totalPages)
+      setError("")
+    } catch (err) {
+      console.error("Error fetching users:", err)
+      setError("Failed to load users. Please try again.")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load users.",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchRecentUsers = async () => {
+    try {
+      const data = await getRecentUsers()
+      setRecentUsers(data)
+    } catch (err) {
+      console.error("Error fetching recent users:", err)
+    }
+  }
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await fetchUsers()
+      await fetchRecentUsers()
+
+      toast({
+        title: "Success",
+        description: "User data refreshed successfully.",
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to refresh user data.",
+      })
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+
+    try {
+      await createUser(newUserData)
+
+      // Refresh the user list
+      await fetchUsers()
+
+      setIsCreateModalOpen(false)
+      setNewUserData({
+        license: "",
+        username: "",
+        email: "",
+        password: "",
+        roles: ["User"],
+      })
+
+      toast({
+        title: "Success",
+        description: "User created successfully.",
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.response?.data?.error || "Failed to create user.",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDelete = async (license) => {
+    try {
+      await deleteUser(license)
+
+      // Update the users list after deletion
+      setUsers(users.filter((user) => user.license !== license))
+
+      toast({
+        title: "Success",
+        description: "User deleted successfully.",
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.response?.data?.error || "Failed to delete user.",
+      })
+    }
+  }
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target
+    setNewUserData({ ...newUserData, [name]: value })
+  }
+
+  const toggleRole = (role) => {
+    setNewUserData((prevData) => ({
+      ...prevData,
+      roles: prevData.roles.includes(role) ? prevData.roles.filter((r) => r !== role) : [...prevData.roles, role],
+    }))
+  }
+
+  // Filter users based on search term and role
+  const filteredUsers = users.filter((user) => {
+    const matchesSearch =
+      searchTerm === "" ||
+      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.license.toLowerCase().includes(searchTerm.toLowerCase())
+
+    const matchesRole = roleFilter === "all" || user.roles.includes(roleFilter)
+
+    return matchesSearch && matchesRole
+  })
+
+  // Get active and inactive user counts
+  const activeUsers = users.length
+  const adminUsers = users.filter((user) => user.roles.includes("Admin")).length
+  const customerUsers = users.filter((user) => user.roles.includes("Customer")).length
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A"
+
+    const date = new Date(dateString)
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date)
+  }
+
+  // Render loading skeletons
+  if (loading && users.length === 0) {
+    return (
+      <div className="container p-6 mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <Skeleton className="h-10 w-[200px]" />
+          <Skeleton className="h-10 w-[150px]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 mb-6 sm:grid-cols-3">
+          <Skeleton className="h-[100px]" />
+          <Skeleton className="h-[100px]" />
+          <Skeleton className="h-[100px]" />
+        </div>
+
+        <Skeleton className="w-full h-10 mb-6" />
+
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="w-full h-16" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Modify the return statement to wrap the content with MainLayout
+  // Change this:
+  // return (
+  //   <div className="container p-6 mx-auto">
+  // To this:
+  return (
+    <MainLayout>
+      <div className="container p-6 mx-auto">
+        <motion.div initial="hidden" animate="visible" variants={fadeIn} className="flex flex-col gap-6">
+          {/* Header with title and create button */}
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+              <p className="text-muted-foreground">Manage users, roles, and permissions</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+                {refreshing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh
+                  </>
+                )}
+              </Button>
+
+              <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Add User
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Create New User</DialogTitle>
+                    <DialogDescription>
+                      Add a new user to the system. They will receive an email with login instructions.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <form onSubmit={handleCreateUser} className="py-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="license">License ID</Label>
+                        <Input
+                          id="license"
+                          name="license"
+                          placeholder="e.g., LIC-123"
+                          value={newUserData.license}
+                          onChange={handleInputChange}
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="username">Username</Label>
+                        <Input
+                          id="username"
+                          name="username"
+                          placeholder="e.g., johndoe"
+                          value={newUserData.username}
+                          onChange={handleInputChange}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email Address</Label>
+                      <Input
+                        id="email"
+                        name="email"
+                        type="email"
+                        placeholder="e.g., john.doe@example.com"
+                        value={newUserData.email}
+                        onChange={handleInputChange}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <Input
+                        id="password"
+                        name="password"
+                        type="password"
+                        placeholder="Create a strong password"
+                        value={newUserData.password}
+                        onChange={handleInputChange}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Assign Roles</Label>
+                      <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto p-2 border rounded-md">
+                        {Object.entries(roleCategories).map(([category, roles]) => (
+                          <div key={category} className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground">{category}</p>
+                            {roles.map((role) => (
+                              <div key={role} className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  id={`role-${role}`}
+                                  checked={newUserData.roles.includes(role)}
+                                  onChange={() => toggleRole(role)}
+                                  className="w-4 h-4 mr-2 border-gray-300 rounded text-primary focus:ring-primary"
+                                />
+                                <Label htmlFor={`role-${role}`} className="text-sm cursor-pointer">
+                                  {role}
+                                </Label>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <DialogFooter className="pt-4">
+                      <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          "Create User"
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
+
+          {/* Stats cards */}
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-3"
+          >
+            <motion.div variants={slideUp}>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                  <Users className="w-4 h-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{users.length}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {users.length > 0 ? `${recentUsers.length} recently added` : "No users"}
+                  </p>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div variants={slideUp}>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Admin Users</CardTitle>
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{adminUsers}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {users.length > 0 ? `${Math.round((adminUsers / users.length) * 100)}% of total users` : "No users"}
+                  </p>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div variants={slideUp}>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Customer Users</CardTitle>
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{customerUsers}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {users.length > 0
+                      ? `${Math.round((customerUsers / users.length) * 100)}% of total users`
+                      : "No users"}
+                  </p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+
+          {/* Tabs and filters */}
+          <Tabs defaultValue="all-users" value={activeTab} onValueChange={setActiveTab}>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <TabsList>
+                <TabsTrigger value="all-users">All Users</TabsTrigger>
+                <TabsTrigger value="admin-users">Admins</TabsTrigger>
+                <TabsTrigger value="customer-users">Customers</TabsTrigger>
+              </TabsList>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search users..."
+                    className="w-full pl-9 sm:w-[200px] md:w-[250px]"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Filter by role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    {allRoles.map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button variant="outline" className="ml-auto" onClick={handleRefresh}>
+                  <Filter className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+
+            {error && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertTriangle className="w-4 h-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <TabsContent value="all-users" className="mt-6">
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>License</TableHead>
+                        <TableHead>Roles</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loading ? (
+                        // Show skeletons while loading
+                        [...Array(5)].map((_, index) => (
+                          <TableRow key={`skeleton-${index}`}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Skeleton className="w-8 h-8 rounded-full" />
+                                <div className="flex flex-col gap-1">
+                                  <Skeleton className="w-24 h-4" />
+                                  <Skeleton className="w-32 h-3" />
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Skeleton className="w-16 h-4" />
+                            </TableCell>
+                            <TableCell>
+                              <Skeleton className="w-20 h-4" />
+                            </TableCell>
+                            <TableCell>
+                              <Skeleton className="w-24 h-4" />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Skeleton className="w-8 h-8 ml-auto" />
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : filteredUsers.length > 0 ? (
+                        <AnimatePresence>
+                          {filteredUsers.map((user, index) => (
+                            <motion.tr
+                              key={user.license}
+                              custom={index}
+                              initial="hidden"
+                              animate="visible"
+                              exit="exit"
+                              variants={tableRowVariants}
+                              className="group"
+                            >
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="w-8 h-8">
+                                    <AvatarImage
+                                      src={user.image || "/placeholder.svg?height=32&width=32"}
+                                      alt={user.username}
+                                    />
+                                    <AvatarFallback>{user.username.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{user.username}</span>
+                                    <span className="text-xs text-muted-foreground">{user.email}</span>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>{user.license}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                  {user.roles.slice(0, 2).map((role, i) => (
+                                    <Badge key={i} variant="secondary" className="text-xs">
+                                      {role}
+                                    </Badge>
+                                  ))}
+                                  {user.roles.length > 2 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{user.roles.length - 2}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm">{formatDate(user.createdAt)}</span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="w-8 h-8">
+                                        <MoreHorizontal className="w-4 h-4" />
+                                        <span className="sr-only">Open menu</span>
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem asChild>
+                                        <Link to={`/admin/edit-user/${user.license}`} className="cursor-pointer">
+                                          <Edit className="w-4 h-4 mr-2" />
+                                          Edit User
+                                        </Link>
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        className="text-red-600 focus:text-red-600"
+                                        onClick={() => {
+                                          if (window.confirm(`Are you sure you want to delete ${user.username}?`)) {
+                                            handleDelete(user.license)
+                                          }
+                                        }}
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete User
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </TableCell>
+                            </motion.tr>
+                          ))}
+                        </AnimatePresence>
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="h-24 text-center">
+                            No users found.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+                <CardFooter className="flex items-center justify-between py-4">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {filteredUsers.length} of {users.length} users
+                  </div>
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                          disabled={currentPage === 1 || loading}
+                        />
+                      </PaginationItem>
+                      {[...Array(totalPages)].map((_, i) => (
+                        <PaginationItem key={i + 1}>
+                          <PaginationLink
+                            onClick={() => setCurrentPage(i + 1)}
+                            isActive={currentPage === i + 1}
+                            disabled={loading}
+                          >
+                            {i + 1}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                          disabled={currentPage === totalPages || loading}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </CardFooter>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="admin-users" className="mt-6">
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>License</TableHead>
+                        <TableHead>Roles</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <AnimatePresence>
+                        {users
+                          .filter((user) => user.roles.includes("Admin"))
+                          .map((user, index) => (
+                            <motion.tr
+                              key={user.license}
+                              custom={index}
+                              initial="hidden"
+                              animate="visible"
+                              exit="exit"
+                              variants={tableRowVariants}
+                              className="group"
+                            >
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="w-8 h-8">
+                                    <AvatarImage
+                                      src={user.image || "/placeholder.svg?height=32&width=32"}
+                                      alt={user.username}
+                                    />
+                                    <AvatarFallback>{user.username.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{user.username}</span>
+                                    <span className="text-xs text-muted-foreground">{user.email}</span>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>{user.license}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                  {user.roles.slice(0, 2).map((role, i) => (
+                                    <Badge key={i} variant="secondary" className="text-xs">
+                                      {role}
+                                    </Badge>
+                                  ))}
+                                  {user.roles.length > 2 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{user.roles.length - 2}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm">{formatDate(user.createdAt)}</span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="w-8 h-8">
+                                        <MoreHorizontal className="w-4 h-4" />
+                                        <span className="sr-only">Open menu</span>
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem asChild>
+                                        <Link to={`/admin/edit-user/${user.license}`} className="cursor-pointer">
+                                          <Edit className="w-4 h-4 mr-2" />
+                                          Edit User
+                                        </Link>
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        className="text-red-600 focus:text-red-600"
+                                        onClick={() => {
+                                          if (window.confirm(`Are you sure you want to delete ${user.username}?`)) {
+                                            handleDelete(user.license)
+                                          }
+                                        }}
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete User
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </TableCell>
+                            </motion.tr>
+                          ))}
+                      </AnimatePresence>
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="customer-users" className="mt-6">
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>License</TableHead>
+                        <TableHead>Roles</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <AnimatePresence>
+                        {users
+                          .filter((user) => user.roles.includes("Customer"))
+                          .map((user, index) => (
+                            <motion.tr
+                              key={user.license}
+                              custom={index}
+                              initial="hidden"
+                              animate="visible"
+                              exit="exit"
+                              variants={tableRowVariants}
+                              className="group"
+                            >
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="w-8 h-8">
+                                    <AvatarImage
+                                      src={user.image || "/placeholder.svg?height=32&width=32"}
+                                      alt={user.username}
+                                    />
+                                    <AvatarFallback>{user.username.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{user.username}</span>
+                                    <span className="text-xs text-muted-foreground">{user.email}</span>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>{user.license}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                  {user.roles.slice(0, 2).map((role, i) => (
+                                    <Badge key={i} variant="secondary" className="text-xs">
+                                      {role}
+                                    </Badge>
+                                  ))}
+                                  {user.roles.length > 2 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{user.roles.length - 2}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm">{formatDate(user.createdAt)}</span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="w-8 h-8">
+                                        <MoreHorizontal className="w-4 h-4" />
+                                        <span className="sr-only">Open menu</span>
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem asChild>
+                                        <Link to={`/admin/edit-user/${user.license}`} className="cursor-pointer">
+                                          <Edit className="w-4 h-4 mr-2" />
+                                          Edit User
+                                        </Link>
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        className="text-red-600 focus:text-red-600"
+                                        onClick={() => {
+                                          if (window.confirm(`Are you sure you want to delete ${user.username}?`)) {
+                                            handleDelete(user.license)
+                                          }
+                                        }}
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete User
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </TableCell>
+                            </motion.tr>
+                          ))}
+                      </AnimatePresence>
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </motion.div>
+      </div>
+    </MainLayout>
+  );
+}
