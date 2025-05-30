@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+const mongoose = require("mongoose")
 
 const sharePointSchema = new mongoose.Schema(
   {
@@ -37,6 +37,20 @@ const sharePointSchema = new mongoose.Schema(
       default: false,
     },
 
+    managerApproved: {
+      type: Boolean,
+      default: false,
+    },
+
+    approvedAt: {
+      type: Date,
+    },
+
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+
     usersToSign: [
       {
         user: {
@@ -63,14 +77,7 @@ const sharePointSchema = new mongoose.Schema(
       {
         action: {
           type: String,
-          enum: [
-            "created",
-            "updated",
-            "signed",
-            "approved",
-            "rejected",
-            "deadline_extended",
-          ],
+          enum: ["created", "updated", "signed", "approved", "rejected", "deadline_extended"],
           required: true,
         },
         performedBy: {
@@ -115,35 +122,39 @@ const sharePointSchema = new mongoose.Schema(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
-);
+  },
+)
 
 sharePointSchema.virtual("allUsersSigned").get(function () {
-  return this.usersToSign.length > 0 && this.usersToSign.every((user) => user.hasSigned);
-});
+  return this.usersToSign.length > 0 && this.usersToSign.every((user) => user.hasSigned)
+})
 
 sharePointSchema.virtual("completionPercentage").get(function () {
-  if (this.usersToSign.length === 0) return 0;
-  const signedCount = this.usersToSign.filter((user) => user.hasSigned).length;
-  return Math.round((signedCount / this.usersToSign.length) * 100);
-});
+  if (this.usersToSign.length === 0) return 0
+  const signedCount = this.usersToSign.filter((user) => user.hasSigned).length
+  return Math.round((signedCount / this.usersToSign.length) * 100)
+})
 
 sharePointSchema.pre("save", function (next) {
-  if (this.allUsersSigned && this.departmentApprover) {
-    this.status = "completed";
-  } else if (this.usersToSign.some((user) => user.hasSigned)) {
-    this.status = "in_progress";
+  // Only update status if manager has approved
+  if (this.managerApproved) {
+    if (this.allUsersSigned && this.departmentApprover) {
+      this.status = "completed"
+    } else if (this.usersToSign.some((user) => user.hasSigned)) {
+      this.status = "in_progress"
+    }
+
+    if (new Date() > this.deadline && this.status !== "completed") {
+      this.status = "expired"
+    }
   }
 
-  if (new Date() > this.deadline && this.status !== "completed") {
-    this.status = "expired";
-  }
+  next()
+})
 
-  next();
-});
+sharePointSchema.index({ createdBy: 1, status: 1 })
+sharePointSchema.index({ deadline: 1 })
+sharePointSchema.index({ "usersToSign.user": 1 })
+sharePointSchema.index({ managerApproved: 1 })
 
-sharePointSchema.index({ createdBy: 1, status: 1 });
-sharePointSchema.index({ deadline: 1 });
-sharePointSchema.index({ "usersToSign.user": 1 });
-
-export default mongoose.model("SharePoint", sharePointSchema);
+module.exports = mongoose.model("SharePoint", sharePointSchema)

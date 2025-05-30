@@ -9,6 +9,7 @@ require("dotenv").config();
 const userRoutes = require("./routes/userRoutes");
 const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const sharePointRoutes = require("./routes/sharePointRoutes")
 
 
 const app = express();
@@ -42,6 +43,7 @@ mongoose.set("strictQuery", false);
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/sharepoint", sharePointRoutes)
 
 
 // Start Server and Initialize Socket.IO

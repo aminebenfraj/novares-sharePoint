@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom"
+import { Routes, Route } from "react-router-dom"
 import { AuthProvider } from "./context/AuthContext"
 import ProtectedRoute from "./components/protected-route"
 import Unauthorized from "./pages/auth/Unauthorized"
@@ -11,6 +11,10 @@ import Register from "./pages/auth/Register"
 import AdminDashboard from "./pages/roleMangement/AdminDashboard"
 import EditUserRoles from "./pages/roleMangement/EditUserRoles"
 import CreateUser from "./pages/roleMangement/CreateUser"
+import SharePointPage from "./pages/SharePointPage"
+import SharePointDetailsPage from "./pages/SharePointDetailsPage"
+import SharePointListPage from "./pages/SharePointListPage"
+import SharePointCreatePage from "./pages/SharePointCreatePage"
 
 // User Pages
 import ProfilePage from "./pages/user/profile-page"
@@ -51,14 +55,40 @@ function App() {
         <Route path="/unauthorized" element={<Unauthorized />} />
 
         {/* Home route - redirects to login if not authenticated */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
+       <Route
+            path="/"
+            element={
+              <ProtectedRoute requiredRoles={productionRoles}>
+                <SharePointPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* SharePoint routes */}
+          <Route
+            path="/sharepoint"
+            element={
+              <ProtectedRoute requiredRoles={productionRoles}>
+                <SharePointListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sharepoint/create"
+            element={
+              <ProtectedRoute requiredRoles={productionRoles}>
+                <SharePointCreatePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sharepoint/details/:id"
+            element={
+              <ProtectedRoute requiredRoles={productionRoles}>
+                <SharePointDetailsPage />
+              </ProtectedRoute>
+            }
+          />
 
         {/* User profile routes */}
         <Route
@@ -79,14 +109,14 @@ function App() {
         />
 
         {/* Admin routes */}
-        {/* <Route
+        <Route
           path="/admin"
           element={
             <ProtectedRoute requiredRoles={adminRoles}>
               <AdminDashboard />
             </ProtectedRoute>
           }
-        /> */}
+        />
         <Route
           path="/admin/edit-user/:license"
           element={
