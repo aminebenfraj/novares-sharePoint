@@ -25,6 +25,7 @@ function App() {
   // Define role groups for different sections
   const adminRoles = ["Admin"]
   const productionRoles = [
+    "Manager",
     "Admin", 
     "PRODUCCION", 
     "Manufacturing Eng. Manager", 

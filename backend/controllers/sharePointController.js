@@ -2,11 +2,6 @@ const SharePoint = require("../models/SharePoint")
 const User = require("../models/UserModel")
 const mongoose = require("mongoose")
 
-/**
- * Create a new SharePoint document
- * @route POST /api/sharepoint
- * @access Private
- */
 exports.createSharePoint = async (req, res) => {
   try {
     const { title, link, comment, deadline, departmentApprover, usersToSign, fileMetadata } = req.body
@@ -71,11 +66,6 @@ exports.createSharePoint = async (req, res) => {
   }
 }
 
-/**
- * Approve a SharePoint document (Manager only)
- * @route POST /api/sharepoint/:id/approve
- * @access Private (Manager/Admin only)
- */
 exports.approveDocument = async (req, res) => {
   try {
     const sharePoint = await SharePoint.findById(req.params.id)
@@ -137,11 +127,6 @@ exports.approveDocument = async (req, res) => {
   }
 }
 
-/**
- * Get all SharePoint documents with pagination and filtering
- * @route GET /api/sharepoint
- * @access Private
- */
 exports.getAllSharePoints = async (req, res) => {
   try {
     // Pagination parameters
@@ -207,11 +192,7 @@ exports.getAllSharePoints = async (req, res) => {
   }
 }
 
-/**
- * Get a single SharePoint document by ID
- * @route GET /api/sharepoint/:id
- * @access Private
- */
+
 exports.getSharePointById = async (req, res) => {
   try {
     const sharePoint = await SharePoint.findById(req.params.id)
@@ -240,11 +221,7 @@ exports.getSharePointById = async (req, res) => {
   }
 }
 
-/**
- * Get documents statistics
- * @route GET /api/sharepoint/stats
- * @access Private
- */
+
 exports.getDocumentStats = async (req, res) => {
   try {
     // Get total documents count
@@ -321,11 +298,7 @@ exports.getDocumentStats = async (req, res) => {
   }
 }
 
-/**
- * Sign a SharePoint document
- * @route POST /api/sharepoint/:id/sign
- * @access Private
- */
+
 exports.signDocument = async (req, res) => {
   try {
     const { signatureNote } = req.body
@@ -391,11 +364,7 @@ exports.signDocument = async (req, res) => {
   }
 }
 
-/**
- * Update a SharePoint document
- * @route PUT /api/sharepoint/:id
- * @access Private
- */
+
 exports.updateSharePoint = async (req, res) => {
   try {
     const { title, link, comment, deadline, departmentApprover, fileMetadata } = req.body
@@ -463,11 +432,6 @@ exports.updateSharePoint = async (req, res) => {
   }
 }
 
-/**
- * Delete a SharePoint document
- * @route DELETE /api/sharepoint/:id
- * @access Private
- */
 exports.deleteSharePoint = async (req, res) => {
   try {
     const sharePoint = await SharePoint.findById(req.params.id)
@@ -499,11 +463,7 @@ exports.deleteSharePoint = async (req, res) => {
   }
 }
 
-/**
- * Add users to sign a document
- * @route POST /api/sharepoint/:id/users
- * @access Private
- */
+
 exports.addUsersToSign = async (req, res) => {
   try {
     const { users } = req.body
@@ -580,11 +540,7 @@ exports.addUsersToSign = async (req, res) => {
   }
 }
 
-/**
- * Remove a user from signing a document
- * @route DELETE /api/sharepoint/:id/users/:userId
- * @access Private
- */
+
 exports.removeUserToSign = async (req, res) => {
   try {
     const sharePoint = await SharePoint.findById(req.params.id)
@@ -646,11 +602,7 @@ exports.removeUserToSign = async (req, res) => {
   }
 }
 
-/**
- * Update document status
- * @route PATCH /api/sharepoint/:id/status
- * @access Private (Admin only)
- */
+
 exports.updateStatus = async (req, res) => {
   try {
     const { status } = req.body
@@ -707,11 +659,6 @@ exports.updateStatus = async (req, res) => {
   }
 }
 
-/**
- * Get documents pending user's signature
- * @route GET /api/sharepoint/pending-signature
- * @access Private
- */
 exports.getPendingSignatures = async (req, res) => {
   try {
     const pendingDocuments = await SharePoint.find({
@@ -735,11 +682,7 @@ exports.getPendingSignatures = async (req, res) => {
   }
 }
 
-/**
- * Get documents created by current user
- * @route GET /api/sharepoint/my-documents
- * @access Private
- */
+
 exports.getMyDocuments = async (req, res) => {
   try {
     // Pagination parameters
