@@ -11,12 +11,11 @@ import Register from "./pages/auth/Register"
 import AdminDashboard from "./pages/roleMangement/AdminDashboard"
 import EditUserRoles from "./pages/roleMangement/EditUserRoles"
 import CreateUser from "./pages/roleMangement/CreateUser"
-import SharepointForm from "./pages/sharepoint-form"
 
 // SharePoint Pages
-import SharepointShow from "../src/pages/sharepoint-show"
-import SharePointCreatePage from "../src/pages/sharepoint-form"
-import SharepointDetail from "../src/pages/sharepoint-detail"
+import SharepointShow from "./pages/sharepoint-show"
+import SharepointForm from "./pages/sharepoint-form"
+import SharepointDetail from "./pages/sharepoint-detail-enhanced"
 
 // User Pages
 import ProfilePage from "./pages/user/profile-page"
@@ -44,9 +43,6 @@ function App() {
     "Quality Leader UAP2",
     "Quality Leader UAP3"
   ]
-  const logisticRoles = ["Admin"]
-  const inventoryRoles = ["Admin"]
-  const qualityRoles = ["Admin"]
 
   return (
     <AuthProvider>
@@ -56,16 +52,17 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 
-        {/* Home route */}
+        {/* Home route - redirect to sharepoint list */}
         <Route
           path="/"
           element={
             <ProtectedRoute requiredRoles={productionRoles}>
-              <SharepointForm />
+              <SharepointShow />
             </ProtectedRoute>
           }
         />
 
+        {/* SharePoint routes */}
         <Route
           path="/sharepoint"
           element={
@@ -78,12 +75,12 @@ function App() {
           path="/sharepoint/create"
           element={
             <ProtectedRoute requiredRoles={productionRoles}>
-              <SharePointCreatePage />
+              <SharepointForm />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/sharepoint/details/:id"
+          path="/sharepoint/:id"
           element={
             <ProtectedRoute requiredRoles={productionRoles}>
               <SharepointDetail />
