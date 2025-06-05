@@ -1,7 +1,7 @@
 import { apiRequest } from "./api"
 import { getAllUsers as getAdminUsers } from "./admin"
 
-const BASE_URL = "api/sharepoint"
+const BASE_URL = "api/sharepoints"
 
 // Create a new SharePoint document
 export const createSharePoint = (data) => {

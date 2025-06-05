@@ -14,9 +14,9 @@ import CreateUser from "./pages/roleMangement/CreateUser"
 import SharepointForm from "./pages/sharepoint-form"
 
 // SharePoint Pages
-// import SharePointListPage from "../pages/SharePointListPage"
+import SharepointShow from "../src/pages/sharepoint-show"
 import SharePointCreatePage from "../src/pages/sharepoint-form"
-// import SharePointDetailsPage from "./pages/SharePointDetailsPage"
+import SharepointDetail from "../src/pages/sharepoint-detail"
 
 // User Pages
 import ProfilePage from "./pages/user/profile-page"
@@ -66,15 +66,14 @@ function App() {
           }
         />
 
-        {/* SharePoint routes */}
-        {/* <Route
+        <Route
           path="/sharepoint"
           element={
             <ProtectedRoute requiredRoles={productionRoles}>
-              <SharePointListPage />
+              <SharepointShow />
             </ProtectedRoute>
           }
-        /> */}
+        />
         <Route
           path="/sharepoint/create"
           element={
@@ -83,14 +82,14 @@ function App() {
             </ProtectedRoute>
           }
         />
-        {/* <Route
+        <Route
           path="/sharepoint/details/:id"
           element={
             <ProtectedRoute requiredRoles={productionRoles}>
-              <SharePointDetailsPage />
+              <SharepointDetail />
             </ProtectedRoute>
           }
-        /> */}
+        />
 
         {/* User profile routes */}
         <Route
