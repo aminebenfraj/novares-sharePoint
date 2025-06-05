@@ -43,7 +43,7 @@ mongoose.set("strictQuery", false);
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/sharepoint", sharePointRoutes)
+app.use("/api/sharepoints", sharePointRoutes)
 
 
 // Start Server and Initialize Socket.IO

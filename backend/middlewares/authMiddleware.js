@@ -5,18 +5,20 @@ const User = require("../models/UserModel")
 const protect = async (req, res, next) => {
   try {
     let token
+    console.log("Authorization header:", req.headers.authorization);
+    console.log("Cookies:", req.cookies);
 
-    // Check for token in Authorization header or cookies
     const authHeader = req.headers.authorization
     if (authHeader && authHeader.startsWith("Bearer ")) {
-      // Extract token from header
       token = authHeader.split(" ")[1]
+      console.log("Token from Authorization header:", token);
     } else if (req.cookies && req.cookies.token) {
-      // Extract token from cookies
       token = req.cookies.token
+      console.log("Token from cookies:", token);
     }
 
     if (!token) {
+      console.log("No token provided");
       return res.status(401).json({
         error: "Not authorized, no token",
         code: "NO_TOKEN",
@@ -24,54 +26,59 @@ const protect = async (req, res, next) => {
     }
 
     try {
-      // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET)
+      console.log("Decoded JWT:", decoded);
 
-      // Get user from database - only select necessary fields
-      const user = await User.findOne({ license: decoded.license }).select("-password").lean() // Use lean() for better performance
+      const user = await User.findOne({ license: decoded.license }).select("-password").lean()
+      console.log("User from DB:", user);
 
       if (!user) {
+        console.log("User not found for license:", decoded.license);
         return res.status(401).json({
           error: "User not found or deleted",
           code: "USER_NOT_FOUND",
         })
       }
 
-      // Attach user to request
+      if (!user.roles) {
+        console.log("User missing roles:", user);
+        return res.status(401).json({
+          error: "User roles not found",
+          code: "ROLES_NOT_FOUND",
+        })
+      }
+
       req.user = user
+      console.log("req.user set:", req.user);
       next()
     } catch (jwtError) {
-      console.error("JWT verification error:", jwtError)
-
-      // Handle specific JWT errors with clear messages
+      console.error("JWT verification error:", jwtError);
       if (jwtError.name === "JsonWebTokenError") {
         return res.status(401).json({
           error: "Invalid token",
           code: "INVALID_TOKEN",
         })
       }
-
       if (jwtError.name === "TokenExpiredError") {
         return res.status(401).json({
           error: "Token expired, please login again",
           code: "TOKEN_EXPIRED",
         })
       }
-
       res.status(401).json({
         error: "Authentication failed",
         code: "AUTH_FAILED",
       })
     }
   } catch (error) {
-    console.error("Auth middleware error:", error)
+    console.error("Auth middleware error:", error);
     res.status(500).json({
       error: "Server error during authentication",
+      code: "AUTH_SERVER_ERROR",
       requestId: Date.now().toString(36),
     })
   }
 }
-
 // Admin Middleware (Optimized)
 const verifyAdmin = (req, res, next) => {
   if (!req.user) {

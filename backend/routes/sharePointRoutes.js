@@ -1,32 +1,16 @@
-const express = require("express")
-const router = express.Router()
-const { protect, verifyAdmin } = require("../middlewares/authMiddleware")
-const sharePointController = require("../controllers/sharePointController")
+const express = require('express');
+const router = express.Router();
+const sharePointController = require('../controllers/sharePointController');
+const { protect } = require('../middlewares/authMiddleware');
 
-// Base route: /api/sharepoint
+router.post('/', protect, sharePointController.createSharePoint);
+router.get('/', protect, sharePointController.getAllSharePoints);
+router.get('/:id', protect, sharePointController.getSharePointById);
+router.put('/:id', protect, sharePointController.updateSharePoint);
+router.delete('/:id', protect, sharePointController.deleteSharePoint);
+router.post('/:id/sign', protect, sharePointController.signSharePoint);
+router.post('/:id/approve', protect, sharePointController.approveSharePoint);
+router.get('/my-assigned', protect, sharePointController.getMyAssignedSharePoints);
+router.get('/my-created', protect, sharePointController.getMyCreatedSharePoints);
 
-// Protected routes - require authentication
-router.use(protect)
-
-// Statistics route - accessible to all authenticated users
-router.get("/stats", sharePointController.getDocumentStats)
-
-// User-specific document routes
-router.get("/pending-signature", sharePointController.getPendingSignatures)
-router.get("/my-documents", sharePointController.getMyDocuments)
-
-// CRUD operations
-router.post("/", sharePointController.createSharePoint)
-router.get("/", sharePointController.getAllSharePoints)
-router.get("/:id", sharePointController.getSharePointById)
-router.put("/:id", sharePointController.updateSharePoint)
-router.delete("/:id", sharePointController.deleteSharePoint)
-
-// Document actions
-router.post("/:id/approve", sharePointController.approveDocument)
-router.post("/:id/sign", sharePointController.signDocument)
-router.post("/:id/users", sharePointController.addUsersToSign)
-router.delete("/:id/users/:userId", sharePointController.removeUserToSign)
-router.patch("/:id/status", verifyAdmin, sharePointController.updateStatus)
-
-module.exports = router
+module.exports = router;

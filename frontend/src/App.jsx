@@ -11,18 +11,18 @@ import Register from "./pages/auth/Register"
 import AdminDashboard from "./pages/roleMangement/AdminDashboard"
 import EditUserRoles from "./pages/roleMangement/EditUserRoles"
 import CreateUser from "./pages/roleMangement/CreateUser"
-import SharePointPage from "./pages/SharePointPage"
-import SharePointDetailsPage from "./pages/SharePointDetailsPage"
-import SharePointListPage from "./pages/SharePointListPage"
-import SharePointCreatePage from "./pages/SharePointCreatePage"
+import SharepointForm from "./pages/sharepoint-form"
+
+// SharePoint Pages
+// import SharePointListPage from "../pages/SharePointListPage"
+import SharePointCreatePage from "../src/pages/sharepoint-form"
+// import SharePointDetailsPage from "./pages/SharePointDetailsPage"
 
 // User Pages
 import ProfilePage from "./pages/user/profile-page"
 import SettingsPage from "./pages/user/settings-page"
 
-
 function App() {
-  // Define role groups for different sections
   const adminRoles = ["Admin"]
   const productionRoles = [
     "Manager",
@@ -42,8 +42,9 @@ function App() {
     "Quality Manager",
     "Quality Leader UAP1",
     "Quality Leader UAP2",
-    "Quality Leader UAP3"]
- const logisticRoles = ["Admin"]
+    "Quality Leader UAP3"
+  ]
+  const logisticRoles = ["Admin"]
   const inventoryRoles = ["Admin"]
   const qualityRoles = ["Admin"]
 
@@ -55,41 +56,41 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 
-        {/* Home route - redirects to login if not authenticated */}
-       <Route
-            path="/"
-            element={
-              <ProtectedRoute requiredRoles={productionRoles}>
-                <SharePointPage />
-              </ProtectedRoute>
-            }
-          />
+        {/* Home route */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute requiredRoles={productionRoles}>
+              <SharepointForm />
+            </ProtectedRoute>
+          }
+        />
 
-          {/* SharePoint routes */}
-          <Route
-            path="/sharepoint"
-            element={
-              <ProtectedRoute requiredRoles={productionRoles}>
-                <SharePointListPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/sharepoint/create"
-            element={
-              <ProtectedRoute requiredRoles={productionRoles}>
-                <SharePointCreatePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/sharepoint/details/:id"
-            element={
-              <ProtectedRoute requiredRoles={productionRoles}>
-                <SharePointDetailsPage />
-              </ProtectedRoute>
-            }
-          />
+        {/* SharePoint routes */}
+        {/* <Route
+          path="/sharepoint"
+          element={
+            <ProtectedRoute requiredRoles={productionRoles}>
+              <SharePointListPage />
+            </ProtectedRoute>
+          }
+        /> */}
+        <Route
+          path="/sharepoint/create"
+          element={
+            <ProtectedRoute requiredRoles={productionRoles}>
+              <SharePointCreatePage />
+            </ProtectedRoute>
+          }
+        />
+        {/* <Route
+          path="/sharepoint/details/:id"
+          element={
+            <ProtectedRoute requiredRoles={productionRoles}>
+              <SharePointDetailsPage />
+            </ProtectedRoute>
+          }
+        /> */}
 
         {/* User profile routes */}
         <Route
@@ -134,8 +135,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-
-        </Routes>
+      </Routes>
     </AuthProvider>
   )
 }
