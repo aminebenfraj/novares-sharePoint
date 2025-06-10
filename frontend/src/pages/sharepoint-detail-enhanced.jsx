@@ -55,6 +55,7 @@ import { getSharePointById, signSharePoint, approveSharePoint, deleteSharePoint 
 import { toast } from "@/hooks/use-toast"
 import { useAuth } from "../context/AuthContext"
 import MainLayout from "../components/MainLayout"
+import WorkflowStatusIndicator from "../components/workflow-status-indicator"
 
 // Animation variants
 const containerVariants = {
@@ -351,13 +352,15 @@ export default function SharePointDetail({
   const isExpired = sharePoint && new Date(sharePoint.deadline) < new Date()
   const completionPercentage = sharePoint?.completionPercentage || 0
   const canEdit = sharePoint?.createdBy?._id === activeUser?._id || activeUser?.roles?.includes("Admin")
+
+  // Make approval buttons visible for everyone
+  const canApprove = sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved
+
+  // Make sign buttons visible for assigned users when manager approved
   const canSign =
     sharePoint?.managerApproved &&
     sharePoint?.usersToSign?.some((signer) => signer.user._id === activeUser?._id && !signer.hasSigned)
-  const canApprove =
-    activeUser?.roles?.some((role) => ["Admin", "Manager", "Project Manager", "Business Manager"].includes(role)) &&
-    sharePoint?.status === "pending_approval" &&
-    !sharePoint?.managerApproved
+
   const hasManagerApproved = sharePoint?.managerApproved
   const allSigned = sharePoint?.allUsersSigned
   const hasDepartmentApprover = sharePoint?.departmentApprover
@@ -1178,6 +1181,9 @@ export default function SharePointDetail({
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Workflow Status Indicator */}
+                <WorkflowStatusIndicator sharePoint={sharePoint} />
 
                 {/* Timeline */}
                 <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
