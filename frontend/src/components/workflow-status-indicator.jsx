@@ -3,7 +3,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-// Add the missing import for Info icon
 import { FileText, Shield, Users, CheckCircle2, Clock, UserCheck } from "lucide-react"
 import { useAuth } from "../context/AuthContext"
 
@@ -21,32 +20,28 @@ export default function WorkflowStatusIndicator({ sharePoint }) {
   const progress = (currentStep / 3) * 100
 
   const isUserAssigned = sharePoint?.usersToSign?.some((signer) => signer.user._id === user?._id)
-
   const hasUserSigned = sharePoint?.usersToSign?.some((signer) => signer.user._id === user?._id && signer.hasSigned)
-
-  const canUserSign =
-    sharePoint?.managerApproved &&
-    sharePoint?.usersToSign?.some((signer) => signer.user._id === user?._id && !signer.hasSigned)
+  const canUserSign = sharePoint?.managerApproved && isUserAssigned && !hasUserSigned
 
   const steps = [
     {
       id: 1,
       title: "Created",
-      description: "Document created and awaiting approval",
+      description: "Document created and awaiting manager approval",
       icon: FileText,
       status: currentStep >= 1 ? "completed" : "pending",
     },
     {
       id: 2,
-      title: "Approved",
-      description: "Manager approved, ready for signatures",
+      title: "Manager Approved",
+      description: "Manager approved, ready for user signatures",
       icon: Shield,
       status: currentStep >= 2 ? "completed" : currentStep === 1 ? "pending" : "upcoming",
     },
     {
       id: 3,
       title: "Completed",
-      description: "All users have signed",
+      description: "All assigned users have signed",
       icon: CheckCircle2,
       status: currentStep >= 3 ? "completed" : "upcoming",
     },
@@ -123,6 +118,16 @@ export default function WorkflowStatusIndicator({ sharePoint }) {
                     <UserCheck className="w-4 h-4 text-blue-600" />
                     <span className="text-sm font-medium text-blue-700">Ready for your signature</span>
                   </div>
+                  <p className="px-3 text-xs text-muted-foreground">
+                    The manager has approved this document. You can now sign it.
+                  </p>
+                </div>
+              ) : sharePoint?.managerApproved ? (
+                <div className="flex items-center gap-2 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                  <Clock className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700">
+                    Document approved, but you're not assigned to sign
+                  </span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 p-3 border border-orange-200 rounded-lg bg-orange-50">
@@ -130,6 +135,19 @@ export default function WorkflowStatusIndicator({ sharePoint }) {
                   <span className="text-sm font-medium text-orange-700">Waiting for manager approval</span>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Manager approval status */}
+        {user?.roles?.includes("Admin") && !sharePoint.managerApproved && sharePoint.status === "pending_approval" && (
+          <div className="pt-4 border-t">
+            <div className="space-y-2">
+              <h4 className="font-medium">Admin Action Required</h4>
+              <div className="flex items-center gap-2 p-3 border rounded-lg border-amber-200 bg-amber-50">
+                <Shield className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-medium text-amber-700">This document requires your approval</span>
+              </div>
             </div>
           </div>
         )}

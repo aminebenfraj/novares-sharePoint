@@ -39,15 +39,11 @@ import {
   CheckCircle,
   User,
   Shield,
-  Pencil,
   Building,
-  FileIcon,
   Database,
-  Activity,
   Info,
   UserCheck,
   CalendarDays,
-  AlertTriangle,
   Download,
   Settings,
 } from "lucide-react"
@@ -63,31 +59,31 @@ const containerVariants = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.05,
+      staggerChildren: 0.03,
       delayChildren: 0.1,
     },
   },
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, y: 10 },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
-      duration: 0.4,
+      duration: 0.3,
       ease: "easeOut",
     },
   },
 }
 
 const cardVariants = {
-  hidden: { opacity: 0, scale: 0.95 },
+  hidden: { opacity: 0, scale: 0.98 },
   visible: {
     opacity: 1,
     scale: 1,
     transition: {
-      duration: 0.3,
+      duration: 0.2,
       ease: "easeOut",
     },
   },
@@ -103,10 +99,7 @@ export default function SharePointDetail({
   const params = useParams()
   const { user } = useAuth()
 
-  // Get ID from props first, then from URL params, then from current location
   const documentId = propId || params.id || window.location.pathname.split("/").pop()
-
-  // Use currentUser prop if provided, otherwise fall back to useAuth
   const activeUser = propCurrentUser || user
 
   const [sharePoint, setSharePoint] = useState(null)
@@ -144,11 +137,6 @@ export default function SharePointDetail({
     } else {
       setError("No document ID provided")
       setLoading(false)
-      console.error("SharePoint Detail: No valid document ID found", {
-        propId,
-        paramsId: params?.id,
-        pathname: window.location.pathname,
-      })
     }
   }, [documentId])
 
@@ -156,7 +144,6 @@ export default function SharePointDetail({
     try {
       setLoading(true)
       setError(null)
-      console.log("Loading SharePoint details for ID:", documentId)
       const data = await getSharePointById(documentId)
       setSharePoint(data)
     } catch (err) {
@@ -242,21 +229,21 @@ export default function SharePointDetail({
   const getStatusColor = (status) => {
     switch (status) {
       case "completed":
-        return "bg-green-100 text-green-800 border-green-200"
+        return "bg-emerald-50 text-emerald-700 border-emerald-200"
       case "in_progress":
-        return "bg-blue-100 text-blue-800 border-blue-200"
+        return "bg-blue-50 text-blue-700 border-blue-200"
       case "pending":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+        return "bg-amber-50 text-amber-700 border-amber-200"
       case "pending_approval":
-        return "bg-orange-100 text-orange-800 border-orange-200"
+        return "bg-orange-50 text-orange-700 border-orange-200"
       case "expired":
-        return "bg-red-100 text-red-800 border-red-200"
+        return "bg-red-50 text-red-700 border-red-200"
       case "cancelled":
-        return "bg-gray-100 text-gray-800 border-gray-200"
+        return "bg-gray-50 text-gray-700 border-gray-200"
       case "rejected":
-        return "bg-red-100 text-red-800 border-red-200"
+        return "bg-red-50 text-red-700 border-red-200"
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200"
+        return "bg-gray-50 text-gray-700 border-gray-200"
     }
   }
 
@@ -303,11 +290,11 @@ export default function SharePointDetail({
   if (loading) {
     return (
       <MainLayout>
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <div className="flex items-center justify-center min-h-screen bg-background">
           <div className="space-y-4 text-center">
-            <div className="inline-block w-12 h-12 border-4 border-blue-200 rounded-full border-t-blue-600 animate-spin"></div>
-            <h3 className="text-xl font-medium text-gray-700">Loading document details...</h3>
-            <p className="text-sm text-gray-500">Document ID: {documentId}</p>
+            <div className="inline-block w-12 h-12 border-4 rounded-full border-muted border-t-primary animate-spin"></div>
+            <h3 className="text-xl font-medium text-foreground">Loading document details...</h3>
+            <p className="text-sm text-muted-foreground">Document ID: {documentId}</p>
           </div>
         </div>
       </MainLayout>
@@ -317,10 +304,10 @@ export default function SharePointDetail({
   if (error || !sharePoint) {
     return (
       <MainLayout>
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-          <Card className="w-full max-w-md border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+        <div className="flex items-center justify-center min-h-screen bg-background">
+          <Card className="w-full max-w-md">
             <CardHeader>
-              <CardTitle className="text-xl text-red-600">Error Loading Document</CardTitle>
+              <CardTitle className="text-xl text-destructive">Error Loading Document</CardTitle>
               <CardDescription>We couldn't load the document details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -351,25 +338,64 @@ export default function SharePointDetail({
 
   const isExpired = sharePoint && new Date(sharePoint.deadline) < new Date()
   const completionPercentage = sharePoint?.completionPercentage || 0
-  const canEdit = sharePoint?.createdBy?._id === activeUser?._id || activeUser?.roles?.includes("Admin")
-
-  // Make approval buttons visible for everyone
-  const canApprove = sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved
-
-  // Make sign buttons visible for assigned users when manager approved
-  const canSign =
-    sharePoint?.managerApproved &&
-    sharePoint?.usersToSign?.some((signer) => signer.user._id === activeUser?._id && !signer.hasSigned)
-
+  const canEdit = sharePoint?.createdBy?.license === activeUser?.license || activeUser?.roles?.includes("Admin")
+  const canApprove =
+    user?.roles?.includes("Admin") && sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved
   const hasManagerApproved = sharePoint?.managerApproved
   const allSigned = sharePoint?.allUsersSigned
+
   const hasDepartmentApprover = sharePoint?.departmentApprover
+
+  // More robust user matching using license instead of _id
+  const currentUserLicense = activeUser?.license || user?.license
+  const currentUserUsername = activeUser?.username || user?.username
+  const currentUserId = activeUser?._id || user?._id
+
+  console.log("Current user info:", { currentUserLicense, currentUserUsername, currentUserId })
+  console.log(
+    "Users to sign:",
+    sharePoint?.usersToSign?.map((s) => ({
+      userId: s.user._id,
+      username: s.user.username,
+      email: s.user.email,
+      hasSigned: s.hasSigned,
+    })),
+  )
+
+  // Find the current user in the signers list using multiple criteria
+  const userSigner = sharePoint?.usersToSign?.find((signer) => {
+    // Try matching by username first (most reliable)
+    if (currentUserUsername && signer.user.username === currentUserUsername) {
+      console.log(`✅ Found user by username: ${currentUserUsername}`)
+      return true
+    }
+
+    // Try matching by user ID
+    if (currentUserId && signer.user._id === currentUserId) {
+      console.log(`✅ Found user by ID: ${currentUserId}`)
+      return true
+    }
+
+    // Try matching by license if available
+    if (currentUserLicense && signer.user.license === currentUserLicense) {
+      console.log(`✅ Found user by license: ${currentUserLicense}`)
+      return true
+    }
+
+    return false
+  })
+
+  const canSign = sharePoint?.managerApproved && userSigner && !userSigner.hasSigned
+
+  console.log("User signer found:", userSigner)
+  console.log("Manager approved:", sharePoint?.managerApproved)
+  console.log("Can sign:", canSign)
 
   return (
     <MainLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      <div className="min-h-screen bg-background">
         <div className="container p-6 mx-auto max-w-7xl">
-          <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-8">
+          <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6">
             {/* Header with Back Button */}
             <motion.div variants={itemVariants} className="flex items-center justify-between">
               <Button variant="ghost" onClick={handleBack} className="gap-2">
@@ -414,29 +440,27 @@ export default function SharePointDetail({
 
             {/* Document Title and Status */}
             <motion.div variants={itemVariants} className="space-y-4">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text md:text-4xl">
-                    {sharePoint.title}
-                  </h1>
-                  <p className="mt-2 text-muted-foreground">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="space-y-2">
+                  <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">{sharePoint.title}</h1>
+                  <p className="text-muted-foreground">
                     Created by {sharePoint.createdBy?.username} on {formatDate(sharePoint.creationDate)}
                   </p>
-                  <p className="text-sm text-muted-foreground">Document ID: {sharePoint._id}</p>
+                  <p className="font-mono text-sm text-muted-foreground">ID: {sharePoint._id}</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Badge className={getStatusColor(sharePoint.status)}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={getStatusColor(sharePoint.status)} variant="outline">
                     {getStatusIcon(sharePoint.status)}
                     <span className="ml-1">{sharePoint.status.replace("_", " ").toUpperCase()}</span>
                   </Badge>
                   {isExpired && !allSigned && (
-                    <Badge variant="destructive" className="text-xs">
+                    <Badge variant="destructive">
                       <Timer className="w-3 h-3 mr-1" />
                       Expired
                     </Badge>
                   )}
                   {hasManagerApproved && (
-                    <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
+                    <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
                       <Shield className="w-3 h-3 mr-1" />
                       Manager Approved
                     </Badge>
@@ -448,7 +472,7 @@ export default function SharePointDetail({
                     </Badge>
                   )}
                   {allSigned && (
-                    <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
+                    <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
                       <UserCheck className="w-3 h-3 mr-1" />
                       All Signed
                     </Badge>
@@ -475,12 +499,176 @@ export default function SharePointDetail({
               </div>
             </motion.div>
 
+            {/* Action Buttons */}
+            {(canApprove ||
+              canSign ||
+              (sharePoint?.managerApproved &&
+                sharePoint?.usersToSign?.some(
+                  (signer) => signer.user.license === activeUser?.license && !signer.hasSigned,
+                ))) && (
+              <motion.div variants={itemVariants}>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      {/* Manager Approval Buttons - Only show if document needs manager approval */}
+                      {canApprove && (
+                        <div className="flex flex-1 gap-2">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button className="flex-1">
+                                <Shield className="w-4 h-4 mr-2" />
+                                Approve Document
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Approve Document</DialogTitle>
+                                <DialogDescription>
+                                  Are you sure you want to approve "{sharePoint.title}"? This will allow assigned users
+                                  to sign the document.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="flex justify-end gap-2 mt-4">
+                                <Button variant="outline" disabled={isSubmitting}>
+                                  Cancel
+                                </Button>
+                                <Button onClick={() => handleApprove(true)} disabled={isSubmitting}>
+                                  {isSubmitting ? "Approving..." : "Approve"}
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="destructive" className="flex-1">
+                                <XCircle className="w-4 h-4 mr-2" />
+                                Reject Document
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Reject Document</DialogTitle>
+                                <DialogDescription>
+                                  Are you sure you want to reject "{sharePoint.title}"? This action cannot be undone.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="flex justify-end gap-2 mt-4">
+                                <Button variant="outline" disabled={isSubmitting}>
+                                  Cancel
+                                </Button>
+                                <Button
+                                  onClick={() => handleApprove(false)}
+                                  disabled={isSubmitting}
+                                  variant="destructive"
+                                >
+                                  {isSubmitting ? "Rejecting..." : "Reject"}
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      )}
+
+                      {/* User Signature Button - Show if user is assigned and manager has approved */}
+                      {(canSign ||
+                        (sharePoint?.managerApproved &&
+                          sharePoint?.usersToSign?.some(
+                            (signer) => signer.user.license === activeUser?.license && !signer.hasSigned,
+                          ))) && (
+                        <div className="flex-1">
+                          <Dialog open={showSignDialog} onOpenChange={setShowSignDialog}>
+                            <DialogTrigger asChild>
+                              <Button className="w-full" size="lg">
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                Sign Document
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Sign Document</DialogTitle>
+                                <DialogDescription>
+                                  You are about to sign "{sharePoint.title}". This action cannot be undone.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="mt-4 space-y-4">
+                                <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Shield className="w-4 h-4 text-blue-600" />
+                                    <span className="text-sm font-medium text-blue-700">Manager Approved</span>
+                                  </div>
+                                  <p className="text-xs text-blue-600">
+                                    This document has been approved by the manager and is ready for your signature.
+                                  </p>
+                                </div>
+                                <div className="space-y-2">
+                                  <h4 className="text-sm font-medium">Add a note (optional)</h4>
+                                  <Textarea
+                                    placeholder="Add any comments or notes about your signature..."
+                                    value={signatureNote}
+                                    onChange={(e) => setSignatureNote(e.target.value)}
+                                    className="min-h-[100px]"
+                                  />
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => setShowSignDialog(false)}
+                                    disabled={isSubmitting}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button onClick={handleSign} disabled={isSubmitting}>
+                                    {isSubmitting ? "Signing..." : "Confirm Signature"}
+                                  </Button>
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Status Information */}
+                    <div className="p-3 mt-4 rounded-lg bg-muted">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Document Status:</span>
+                        <div className="flex items-center gap-2">
+                          {sharePoint.managerApproved ? (
+                            <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
+                              <Shield className="w-3 h-3 mr-1" />
+                              Manager Approved
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Awaiting Approval
+                            </Badge>
+                          )}
+                          {sharePoint.allUsersSigned ? (
+                            <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
+                              <UserCheck className="w-3 h-3 mr-1" />
+                              All Signed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">
+                              <Users className="w-3 h-3 mr-1" />
+                              Awaiting Signatures
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+
             {/* Main Content */}
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               {/* Document Details */}
               <motion.div variants={cardVariants} className="space-y-6 lg:col-span-2">
                 <Tabs defaultValue="overview" className="w-full">
-                  <TabsList className="grid w-full grid-cols-6">
+                  <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="overview" className="flex items-center gap-1">
                       <Info className="w-3 h-3" />
                       Overview
@@ -501,18 +689,14 @@ export default function SharePointDetail({
                       <Shield className="w-3 h-3" />
                       Approvals
                     </TabsTrigger>
-                    <TabsTrigger value="actions" className="flex items-center gap-1">
-                      <Pencil className="w-3 h-3" />
-                      Actions
-                    </TabsTrigger>
                   </TabsList>
 
                   {/* Overview Tab */}
                   <TabsContent value="overview" className="mt-6">
-                    <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+                    <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                          <FileText className="w-5 h-5 text-blue-600" />
+                          <FileText className="w-5 h-5 text-primary" />
                           Document Overview
                         </CardTitle>
                       </CardHeader>
@@ -537,11 +721,11 @@ export default function SharePointDetail({
                             <div>
                               <h3 className="mb-2 text-sm font-medium text-muted-foreground">Deadline</h3>
                               <div
-                                className={`flex items-center gap-2 p-3 rounded-lg border ${isExpired ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}
+                                className={`flex items-center gap-2 p-3 rounded-lg border ${isExpired ? "bg-red-50 border-red-200" : "bg-muted border-border"}`}
                               >
                                 <Calendar className="w-4 h-4" />
                                 <div>
-                                  <p className={`font-medium ${isExpired ? "text-red-600" : ""}`}>
+                                  <p className={`font-medium ${isExpired ? "text-red-600" : "text-foreground"}`}>
                                     {formatDate(sharePoint.deadline)}
                                   </p>
                                   {isExpired && <p className="text-xs text-red-500">This deadline has passed</p>}
@@ -551,7 +735,7 @@ export default function SharePointDetail({
 
                             <div>
                               <h3 className="mb-2 text-sm font-medium text-muted-foreground">Creation Date</h3>
-                              <div className="flex items-center gap-2 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                              <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted">
                                 <CalendarDays className="w-4 h-4" />
                                 <p className="font-medium">{formatDate(sharePoint.creationDate)}</p>
                               </div>
@@ -562,14 +746,14 @@ export default function SharePointDetail({
                             <div>
                               <h3 className="mb-2 text-sm font-medium text-muted-foreground">Status Information</h3>
                               <div className="space-y-2">
-                                <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-gray-50">
+                                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted">
                                   <span className="text-sm">Current Status</span>
-                                  <Badge className={getStatusColor(sharePoint.status)}>
+                                  <Badge className={getStatusColor(sharePoint.status)} variant="outline">
                                     {getStatusIcon(sharePoint.status)}
                                     <span className="ml-1">{sharePoint.status.replace("_", " ").toUpperCase()}</span>
                                   </Badge>
                                 </div>
-                                <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-gray-50">
+                                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted">
                                   <span className="text-sm">All Users Signed</span>
                                   <Badge variant={allSigned ? "default" : "secondary"}>
                                     {allSigned ? (
@@ -580,7 +764,7 @@ export default function SharePointDetail({
                                     {allSigned ? "Yes" : "No"}
                                   </Badge>
                                 </div>
-                                <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-gray-50">
+                                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted">
                                   <span className="text-sm">Manager Approved</span>
                                   <Badge variant={hasManagerApproved ? "default" : "secondary"}>
                                     {hasManagerApproved ? (
@@ -591,17 +775,6 @@ export default function SharePointDetail({
                                     {hasManagerApproved ? "Yes" : "Pending"}
                                   </Badge>
                                 </div>
-                                <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-gray-50">
-                                  <span className="text-sm">Department Approved</span>
-                                  <Badge variant={hasDepartmentApprover ? "default" : "secondary"}>
-                                    {hasDepartmentApprover ? (
-                                      <CheckCircle className="w-3 h-3 mr-1" />
-                                    ) : (
-                                      <Clock className="w-3 h-3 mr-1" />
-                                    )}
-                                    {hasDepartmentApprover ? "Yes" : "Pending"}
-                                  </Badge>
-                                </div>
                               </div>
                             </div>
                           </div>
@@ -610,41 +783,8 @@ export default function SharePointDetail({
                         {sharePoint.comment && (
                           <div className="space-y-2">
                             <h3 className="text-sm font-medium text-muted-foreground">Comments</h3>
-                            <div className="p-4 border rounded-lg bg-slate-50">
+                            <div className="p-4 border rounded-lg bg-muted">
                               <p className="text-sm whitespace-pre-wrap">{sharePoint.comment}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* File Metadata */}
-                        {sharePoint.fileMetadata && (
-                          <div className="space-y-2">
-                            <h3 className="text-sm font-medium text-muted-foreground">File Information</h3>
-                            <div className="grid gap-4 md:grid-cols-2">
-                              <div className="p-4 border rounded-lg bg-slate-50">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <FileIcon className="w-4 h-4" />
-                                  <span className="font-medium">File Details</span>
-                                </div>
-                                <div className="space-y-1 text-sm">
-                                  <p>
-                                    <span className="text-muted-foreground">Name:</span>{" "}
-                                    {sharePoint.fileMetadata.fileName || "N/A"}
-                                  </p>
-                                  <p>
-                                    <span className="text-muted-foreground">Size:</span>{" "}
-                                    {formatFileSize(sharePoint.fileMetadata.fileSize)}
-                                  </p>
-                                  <p>
-                                    <span className="text-muted-foreground">Type:</span>{" "}
-                                    {sharePoint.fileMetadata.fileType || "N/A"}
-                                  </p>
-                                  <p>
-                                    <span className="text-muted-foreground">Last Modified:</span>{" "}
-                                    {formatDate(sharePoint.fileMetadata.lastModified)}
-                                  </p>
-                                </div>
-                              </div>
                             </div>
                           </div>
                         )}
@@ -654,10 +794,10 @@ export default function SharePointDetail({
 
                   {/* Signers Tab */}
                   <TabsContent value="signers" className="mt-6">
-                    <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+                    <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                          <Users className="w-5 h-5 text-blue-600" />
+                          <Users className="w-5 h-5 text-primary" />
                           Signature Details ({sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0}/
                           {sharePoint.usersToSign?.length || 0})
                         </CardTitle>
@@ -665,10 +805,10 @@ export default function SharePointDetail({
                       <CardContent>
                         <div className="space-y-4">
                           {sharePoint.usersToSign?.map((signer, index) => (
-                            <Card key={signer.user._id} className="overflow-hidden border">
+                            <Card key={signer.user._id} className="overflow-hidden">
                               <div
                                 className={`flex items-center justify-between p-4 ${
-                                  signer.hasSigned ? "bg-green-50" : "bg-gray-50"
+                                  signer.hasSigned ? "bg-emerald-50" : "bg-muted"
                                 }`}
                               >
                                 <div className="flex items-center gap-3">
@@ -691,7 +831,10 @@ export default function SharePointDetail({
                                 <div className="flex items-center gap-2">
                                   <div className="text-right">
                                     {signer.hasSigned ? (
-                                      <Badge className="text-green-800 bg-green-100 border-green-200">
+                                      <Badge
+                                        className="text-emerald-700 bg-emerald-100 border-emerald-200"
+                                        variant="outline"
+                                      >
                                         <CheckCircle2 className="w-3 h-3 mr-1" />
                                         Signed
                                       </Badge>
@@ -700,6 +843,11 @@ export default function SharePointDetail({
                                         <Clock className="w-3 h-3 mr-1" />
                                         Pending
                                       </Badge>
+                                    )}
+                                    {signer.hasSigned && (
+                                      <p className="mt-1 text-xs text-muted-foreground">
+                                        {formatDate(signer.signedAt)}
+                                      </p>
                                     )}
                                     {signer.hasSigned && (
                                       <p className="mt-1 text-xs text-muted-foreground">
@@ -729,10 +877,10 @@ export default function SharePointDetail({
 
                   {/* History Tab */}
                   <TabsContent value="history" className="mt-6">
-                    <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+                    <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                          <History className="w-5 h-5 text-blue-600" />
+                          <History className="w-5 h-5 text-primary" />
                           Update History ({sharePoint.updateHistory?.length || 0} events)
                         </CardTitle>
                       </CardHeader>
@@ -741,7 +889,7 @@ export default function SharePointDetail({
                           {sharePoint.updateHistory?.map((event, index) => (
                             <div key={index} className="relative pb-6 pl-6">
                               {index !== sharePoint.updateHistory.length - 1 && (
-                                <div className="absolute top-6 bottom-0 left-[11px] w-0.5 bg-gray-200"></div>
+                                <div className="absolute top-6 bottom-0 left-[11px] w-0.5 bg-border"></div>
                               )}
                               <div className="flex items-start gap-4">
                                 <div
@@ -749,16 +897,16 @@ export default function SharePointDetail({
                                     event.action === "created" ||
                                     event.action === "signed" ||
                                     event.action === "approved"
-                                      ? "bg-green-100"
+                                      ? "bg-emerald-100"
                                       : event.action === "rejected"
                                         ? "bg-red-100"
                                         : "bg-blue-100"
                                   }`}
                                 >
-                                  {event.action === "created" && <FileText className="w-3 h-3 text-green-600" />}
+                                  {event.action === "created" && <FileText className="w-3 h-3 text-emerald-600" />}
                                   {event.action === "updated" && <Edit className="w-3 h-3 text-blue-600" />}
-                                  {event.action === "signed" && <CheckCircle className="w-3 h-3 text-green-600" />}
-                                  {event.action === "approved" && <Shield className="w-3 h-3 text-green-600" />}
+                                  {event.action === "signed" && <CheckCircle className="w-3 h-3 text-emerald-600" />}
+                                  {event.action === "approved" && <Shield className="w-3 h-3 text-emerald-600" />}
                                   {event.action === "rejected" && <XCircle className="w-3 h-3 text-red-600" />}
                                   {event.action === "deadline_extended" && (
                                     <Calendar className="w-3 h-3 text-blue-600" />
@@ -772,18 +920,6 @@ export default function SharePointDetail({
                                   <p className="text-sm text-muted-foreground">
                                     {event.performedBy?.username || "Unknown user"} - {event.details}
                                   </p>
-                                  {event.previousValues && (
-                                    <details className="mt-2">
-                                      <summary className="text-xs cursor-pointer text-muted-foreground hover:text-foreground">
-                                        View previous values
-                                      </summary>
-                                      <div className="p-2 mt-2 text-xs rounded bg-gray-50">
-                                        <pre className="whitespace-pre-wrap">
-                                          {JSON.stringify(event.previousValues, null, 2)}
-                                        </pre>
-                                      </div>
-                                    </details>
-                                  )}
                                 </div>
                               </div>
                             </div>
@@ -795,10 +931,10 @@ export default function SharePointDetail({
 
                   {/* Metadata Tab */}
                   <TabsContent value="metadata" className="mt-6">
-                    <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+                    <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                          <Database className="w-5 h-5 text-blue-600" />
+                          <Database className="w-5 h-5 text-primary" />
                           Technical Metadata
                         </CardTitle>
                       </CardHeader>
@@ -833,59 +969,6 @@ export default function SharePointDetail({
                               </TableBody>
                             </Table>
                           </div>
-
-                          <div>
-                            <h3 className="mb-3 text-sm font-medium text-muted-foreground">Computed Properties</h3>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Property</TableHead>
-                                  <TableHead>Value</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                <TableRow>
-                                  <TableCell className="font-medium">All Users Signed</TableCell>
-                                  <TableCell>
-                                    <Badge variant={allSigned ? "default" : "secondary"}>
-                                      {allSigned ? "True" : "False"}
-                                    </Badge>
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell className="font-medium">Completion Percentage</TableCell>
-                                  <TableCell>
-                                    <div className="flex items-center gap-2">
-                                      <Progress value={completionPercentage} className="w-20 h-2" />
-                                      <span className="text-sm font-medium">{completionPercentage}%</span>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell className="font-medium">Is Expired</TableCell>
-                                  <TableCell>
-                                    <Badge variant={isExpired ? "destructive" : "secondary"}>
-                                      {isExpired ? "True" : "False"}
-                                    </Badge>
-                                  </TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
-                          </div>
-
-                          <div>
-                            <h3 className="mb-3 text-sm font-medium text-muted-foreground">Raw Document Data</h3>
-                            <details className="border rounded-lg">
-                              <summary className="p-3 cursor-pointer hover:bg-gray-50">
-                                View complete document JSON
-                              </summary>
-                              <div className="p-3 border-t bg-gray-50">
-                                <pre className="overflow-auto text-xs max-h-96">
-                                  {JSON.stringify(sharePoint, null, 2)}
-                                </pre>
-                              </div>
-                            </details>
-                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -893,24 +976,22 @@ export default function SharePointDetail({
 
                   {/* Approvals Tab */}
                   <TabsContent value="approvals" className="mt-6">
-                    <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+                    <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                          <Shield className="w-5 h-5 text-blue-600" />
+                          <Shield className="w-5 h-5 text-primary" />
                           Approval Status
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-6">
                         <div className="grid gap-4 md:grid-cols-2">
                           <Card
-                            className={`p-4 ${hasManagerApproved ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}
+                            className={`p-4 ${hasManagerApproved ? "bg-emerald-50 border-emerald-200" : "bg-muted border-border"}`}
                           >
                             <div className="flex items-center gap-3">
-                              <div
-                                className={`p-2 rounded-full ${hasManagerApproved ? "bg-green-100" : "bg-gray-100"}`}
-                              >
+                              <div className={`p-2 rounded-full ${hasManagerApproved ? "bg-emerald-100" : "bg-muted"}`}>
                                 <Shield
-                                  className={`w-5 h-5 ${hasManagerApproved ? "text-green-600" : "text-gray-400"}`}
+                                  className={`w-5 h-5 ${hasManagerApproved ? "text-emerald-600" : "text-muted-foreground"}`}
                                 />
                               </div>
                               <div>
@@ -937,412 +1018,6 @@ export default function SharePointDetail({
                               </div>
                             )}
                           </Card>
-
-                          <Card
-                            className={`p-4 ${hasDepartmentApprover ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200"}`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={`p-2 rounded-full ${hasDepartmentApprover ? "bg-blue-100" : "bg-gray-100"}`}
-                              >
-                                <Building
-                                  className={`w-5 h-5 ${hasDepartmentApprover ? "text-blue-600" : "text-gray-400"}`}
-                                />
-                              </div>
-                              <div>
-                                <h3 className="font-medium">Department Approval</h3>
-                                <p className="text-sm text-muted-foreground">
-                                  {hasDepartmentApprover ? "Approved" : "Pending approval"}
-                                </p>
-                              </div>
-                            </div>
-                          </Card>
-                        </div>
-
-                        <div>
-                          <h3 className="mb-3 text-sm font-medium text-muted-foreground">Approval Requirements</h3>
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-gray-50">
-                              <span className="text-sm">All signatures collected</span>
-                              <Badge variant={allSigned ? "default" : "secondary"}>
-                                {allSigned ? (
-                                  <CheckCircle className="w-3 h-3 mr-1" />
-                                ) : (
-                                  <Clock className="w-3 h-3 mr-1" />
-                                )}
-                                {allSigned ? "Complete" : "Pending"}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-gray-50">
-                              <span className="text-sm">Manager approval</span>
-                              <Badge variant={hasManagerApproved ? "default" : "secondary"}>
-                                {hasManagerApproved ? (
-                                  <CheckCircle className="w-3 h-3 mr-1" />
-                                ) : (
-                                  <Clock className="w-3 h-3 mr-1" />
-                                )}
-                                {hasManagerApproved ? "Approved" : "Pending"}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-gray-50">
-                              <span className="text-sm">Department approval</span>
-                              <Badge variant={hasDepartmentApprover ? "default" : "secondary"}>
-                                {hasDepartmentApprover ? (
-                                  <CheckCircle className="w-3 h-3 mr-1" />
-                                ) : (
-                                  <Clock className="w-3 h-3 mr-1" />
-                                )}
-                                {hasDepartmentApprover ? "Approved" : "Pending"}
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-
-                  {/* Actions Tab */}
-                  <TabsContent value="actions" className="mt-6">
-                    <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <Activity className="w-5 h-5 text-blue-600" />
-                          Available Actions
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-6">
-                          {canSign && (
-                            <div className="space-y-2">
-                              <h3 className="font-medium">Sign Document</h3>
-                              <p className="text-sm text-muted-foreground">
-                                You are required to sign this document. Click the button below to proceed.
-                              </p>
-                              <Dialog open={showSignDialog} onOpenChange={setShowSignDialog}>
-                                <DialogTrigger asChild>
-                                  <Button className="bg-gradient-to-r from-blue-600 to-indigo-600">
-                                    <CheckCircle className="w-4 h-4 mr-2" />
-                                    Sign Document
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>Sign Document</DialogTitle>
-                                    <DialogDescription>
-                                      You are about to sign "{sharePoint.title}". This action cannot be undone.
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <div className="mt-4 space-y-4">
-                                    <div className="space-y-2">
-                                      <h4 className="text-sm font-medium">Add a note (optional)</h4>
-                                      <Textarea
-                                        placeholder="Add any comments or notes about your signature..."
-                                        value={signatureNote}
-                                        onChange={(e) => setSignatureNote(e.target.value)}
-                                        className="min-h-[100px]"
-                                      />
-                                    </div>
-                                    <div className="flex justify-end gap-2">
-                                      <Button
-                                        variant="outline"
-                                        onClick={() => setShowSignDialog(false)}
-                                        disabled={isSubmitting}
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button onClick={handleSign} disabled={isSubmitting}>
-                                        {isSubmitting ? "Signing..." : "Confirm Signature"}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
-                            </div>
-                          )}
-
-                          {/* Show message when manager approval is required */}
-                          {sharePoint?.usersToSign?.some((signer) => signer.user._id === activeUser?._id) &&
-                            !sharePoint?.managerApproved && (
-                              <div className="space-y-2">
-                                <h3 className="font-medium">Signature Required</h3>
-                                <Alert className="border-orange-200 bg-orange-50">
-                                  <Shield className="w-4 h-4 text-orange-600" />
-                                  <AlertTitle>Manager Approval Required</AlertTitle>
-                                  <AlertDescription>
-                                    This document must be approved by a manager before you can sign it. You will be
-                                    notified once approval is granted.
-                                  </AlertDescription>
-                                </Alert>
-                              </div>
-                            )}
-
-                          {canApprove && (
-                            <div className="space-y-2">
-                              <h3 className="font-medium">Manager Approval Required</h3>
-                              <p className="text-sm text-muted-foreground">
-                                This document is waiting for manager approval. Once approved, assigned users can sign
-                                it.
-                              </p>
-                              <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
-                                <DialogTrigger asChild>
-                                  <Button className="bg-gradient-to-r from-green-600 to-emerald-600">
-                                    <Shield className="w-4 h-4 mr-2" />
-                                    Review & Approve
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>Manager Approval</DialogTitle>
-                                    <DialogDescription>
-                                      You are about to review "{sharePoint.title}". Please approve or reject this
-                                      document.
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <div className="flex justify-end gap-2 mt-4">
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => setShowApproveDialog(false)}
-                                      disabled={isSubmitting}
-                                    >
-                                      Cancel
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      onClick={() => handleApprove(false)}
-                                      disabled={isSubmitting}
-                                    >
-                                      {isSubmitting ? "Processing..." : "Reject"}
-                                    </Button>
-                                    <Button
-                                      variant="default"
-                                      onClick={() => handleApprove(true)}
-                                      disabled={isSubmitting}
-                                      className="bg-green-600 hover:bg-green-700"
-                                    >
-                                      {isSubmitting ? "Processing..." : "Approve"}
-                                    </Button>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
-                            </div>
-                          )}
-
-                          {/* Sign buttons for assigned users after manager approval */}
-                          {hasManagerApproved && (
-                            <div className="space-y-4">
-                              <h3 className="font-medium">Document Approved by Manager</h3>
-                              <Alert className="border-green-200 bg-green-50">
-                                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                                <AlertTitle>Document Approved</AlertTitle>
-                                <AlertDescription>
-                                  This document has been approved by {sharePoint.approvedBy?.username || "a manager"} on{" "}
-                                  {formatDate(sharePoint.approvedAt)}.
-                                </AlertDescription>
-                              </Alert>
-
-                              {/* Show sign button for current user if they're assigned and haven't signed yet */}
-                              {sharePoint?.usersToSign?.some(
-                                (signer) => signer.user._id === activeUser?._id && !signer.hasSigned,
-                              ) ? (
-                                <div className="mt-4 space-y-2">
-                                  <h3 className="font-medium">Your Signature Required</h3>
-                                  <p className="text-sm text-muted-foreground">
-                                    You are assigned to sign this document. Please review and sign it.
-                                  </p>
-                                  <Dialog open={showSignDialog} onOpenChange={setShowSignDialog}>
-                                    <DialogTrigger asChild>
-                                      <Button className="w-full bg-gradient-to-r from-blue-600 to-indigo-600">
-                                        <CheckCircle className="w-4 h-4 mr-2" />
-                                        Sign Document Now
-                                      </Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                      <DialogHeader>
-                                        <DialogTitle>Sign Document</DialogTitle>
-                                        <DialogDescription>
-                                          You are about to sign "{sharePoint.title}". This action cannot be undone.
-                                        </DialogDescription>
-                                      </DialogHeader>
-                                      <div className="mt-4 space-y-4">
-                                        <div className="p-4 border rounded-lg bg-blue-50">
-                                          <h4 className="mb-2 font-medium">Document Information</h4>
-                                          <div className="space-y-1 text-sm">
-                                            <p>
-                                              <span className="font-medium">Title:</span> {sharePoint.title}
-                                            </p>
-                                            <p>
-                                              <span className="font-medium">Created by:</span>{" "}
-                                              {sharePoint.createdBy?.username}
-                                            </p>
-                                            <p>
-                                              <span className="font-medium">Deadline:</span>{" "}
-                                              {formatDate(sharePoint.deadline)}
-                                            </p>
-                                            <p>
-                                              <span className="font-medium">Approved by:</span>{" "}
-                                              {sharePoint.approvedBy?.username}
-                                            </p>
-                                          </div>
-                                        </div>
-                                        <div className="space-y-2">
-                                          <h4 className="text-sm font-medium">Add a signature note (optional)</h4>
-                                          <Textarea
-                                            placeholder="Add any comments or notes about your signature..."
-                                            value={signatureNote}
-                                            onChange={(e) => setSignatureNote(e.target.value)}
-                                            className="min-h-[100px]"
-                                          />
-                                        </div>
-                                        <div className="flex justify-end gap-2">
-                                          <Button
-                                            variant="outline"
-                                            onClick={() => setShowSignDialog(false)}
-                                            disabled={isSubmitting}
-                                          >
-                                            Cancel
-                                          </Button>
-                                          <Button onClick={handleSign} disabled={isSubmitting}>
-                                            {isSubmitting ? "Signing..." : "Confirm Signature"}
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </DialogContent>
-                                  </Dialog>
-                                </div>
-                              ) : sharePoint?.usersToSign?.some(
-                                  (signer) => signer.user._id === activeUser?._id && signer.hasSigned,
-                                ) ? (
-                                <div className="mt-4">
-                                  <Alert className="border-green-200 bg-green-50">
-                                    <CheckCircle2 className="w-4 h-4 text-green-600" />
-                                    <AlertTitle>Document Signed</AlertTitle>
-                                    <AlertDescription>You have already signed this document.</AlertDescription>
-                                  </Alert>
-                                </div>
-                              ) : (
-                                <div className="mt-4">
-                                  <Alert className="border-blue-200 bg-blue-50">
-                                    <Info className="w-4 h-4 text-blue-600" />
-                                    <AlertTitle>Signatures in Progress</AlertTitle>
-                                    <AlertDescription>
-                                      This document is approved and waiting for signatures from assigned users.
-                                    </AlertDescription>
-                                  </Alert>
-                                </div>
-                              )}
-
-                              {/* List of assigned users and their signature status */}
-                              <div className="mt-6">
-                                <h3 className="mb-3 font-medium">Assigned Signers</h3>
-                                <div className="space-y-2">
-                                  {sharePoint.usersToSign?.map((signer) => (
-                                    <div
-                                      key={signer.user._id}
-                                      className={`flex items-center justify-between p-3 rounded-lg border ${
-                                        signer.hasSigned ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <Avatar className="w-8 h-8">
-                                          <AvatarImage src={signer.user.image || "/placeholder.svg"} />
-                                          <AvatarFallback>
-                                            {signer.user.username?.charAt(0).toUpperCase()}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <div>
-                                          <p className="font-medium">{signer.user.username}</p>
-                                          <p className="text-xs text-muted-foreground">
-                                            {signer.user._id === activeUser?._id ? "(You)" : ""}
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <Badge
-                                        className={
-                                          signer.hasSigned
-                                            ? "bg-green-100 text-green-800 border-green-200"
-                                            : "bg-amber-100 text-amber-800 border-amber-200"
-                                        }
-                                      >
-                                        {signer.hasSigned ? (
-                                          <>
-                                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                                            Signed
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Clock className="w-3 h-3 mr-1" />
-                                            Pending
-                                          </>
-                                        )}
-                                      </Badge>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Show approval buttons for managers when document is pending approval */}
-                          {canApprove && (
-                            <div className="space-y-2">
-                              <h3 className="font-medium">Manager Approval Required</h3>
-                              <p className="text-sm text-muted-foreground">
-                                This document is waiting for manager approval. Once approved, assigned users can sign
-                                it.
-                              </p>
-                              <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
-                                <DialogTrigger asChild>
-                                  <Button className="bg-gradient-to-r from-green-600 to-emerald-600">
-                                    <Shield className="w-4 h-4 mr-2" />
-                                    Review & Approve
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>Manager Approval</DialogTitle>
-                                    <DialogDescription>
-                                      You are about to review "{sharePoint.title}". Please approve or reject this
-                                      document.
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <div className="flex justify-end gap-2 mt-4">
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => setShowApproveDialog(false)}
-                                      disabled={isSubmitting}
-                                    >
-                                      Cancel
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      onClick={() => handleApprove(false)}
-                                      disabled={isSubmitting}
-                                    >
-                                      {isSubmitting ? "Processing..." : "Reject"}
-                                    </Button>
-                                    <Button
-                                      variant="default"
-                                      onClick={() => handleApprove(true)}
-                                      disabled={isSubmitting}
-                                      className="bg-green-600 hover:bg-green-700"
-                                    >
-                                      {isSubmitting ? "Processing..." : "Approve"}
-                                    </Button>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
-                            </div>
-                          )}
-
-                          {/* Show message when no actions are available */}
-                          {!hasManagerApproved &&
-                            !canApprove &&
-                            !sharePoint?.usersToSign?.some((signer) => signer.user._id === activeUser?._id) && (
-                              <div className="p-4 text-center border rounded-lg bg-slate-50">
-                                <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                                <p className="text-muted-foreground">No actions available for you at this time.</p>
-                              </div>
-                            )}
                         </div>
                       </CardContent>
                     </Card>
@@ -1353,10 +1028,10 @@ export default function SharePointDetail({
               {/* Sidebar */}
               <motion.div variants={cardVariants} className="space-y-6">
                 {/* Creator Information */}
-                <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+                <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <User className="w-5 h-5 text-blue-600" />
+                      <User className="w-5 h-5 text-primary" />
                       Created By
                     </CardTitle>
                   </CardHeader>
@@ -1385,10 +1060,10 @@ export default function SharePointDetail({
                 <WorkflowStatusIndicator sharePoint={sharePoint} />
 
                 {/* Timeline */}
-                <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+                <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <Clock className="w-5 h-5 text-blue-600" />
+                      <Clock className="w-5 h-5 text-primary" />
                       Timeline
                     </CardTitle>
                   </CardHeader>
@@ -1411,7 +1086,7 @@ export default function SharePointDetail({
                       {sharePoint.approvedAt && (
                         <div className="space-y-1">
                           <p className="text-sm text-muted-foreground">Approved</p>
-                          <p className="font-medium text-green-600">{formatDate(sharePoint.approvedAt)}</p>
+                          <p className="font-medium text-emerald-600">{formatDate(sharePoint.approvedAt)}</p>
                         </div>
                       )}
                     </div>
@@ -1421,7 +1096,7 @@ export default function SharePointDetail({
                     <div className="space-y-1">
                       <p className="text-sm text-muted-foreground">Status</p>
                       <div className="flex items-center gap-2">
-                        <Badge className={getStatusColor(sharePoint.status)}>
+                        <Badge className={getStatusColor(sharePoint.status)} variant="outline">
                           {getStatusIcon(sharePoint.status)}
                           <span className="ml-1">{sharePoint.status.replace("_", " ").toUpperCase()}</span>
                         </Badge>
@@ -1442,10 +1117,10 @@ export default function SharePointDetail({
                 </Card>
 
                 {/* Quick Actions */}
-                <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+                <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <Settings className="w-5 h-5 text-blue-600" />
+                      <Settings className="w-5 h-5 text-primary" />
                       Quick Actions
                     </CardTitle>
                   </CardHeader>
@@ -1476,18 +1151,18 @@ export default function SharePointDetail({
 
                 {/* Approval Status */}
                 {sharePoint.approvedBy && (
-                  <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+                  <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
-                        <Shield className="w-5 h-5 text-green-600" />
+                        <Shield className="w-5 h-5 text-emerald-600" />
                         Approval
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
-                        <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+                        <div className="p-4 border rounded-lg border-emerald-200 bg-emerald-50">
                           <div className="flex items-center gap-2 mb-2">
-                            <CheckCircle2 className="w-5 h-5 text-green-600" />
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                             <p className="font-medium">Approved</p>
                           </div>
                           <div className="flex items-center gap-2">

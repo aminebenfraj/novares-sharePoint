@@ -62,16 +62,6 @@ export const approveSharePoint = (id, approved = true) => {
   return apiRequest("POST", `${BASE_URL}/${id}/approve`, { approved })
 }
 
-// Get users by roles for signer selection (original endpoint)
-
-// Get all available roles from the backend
-// export const getAvailableRoles = () => {
-//   return apiRequest("GET", `${BASE_URL}/roles`)
-// }
-
-// Get users by a specific role
-
-
 // Get SharePoints assigned to current user
 export const getMyAssignedSharePoints = (filters = {}) => {
   const queryParams = new URLSearchParams()
@@ -104,9 +94,11 @@ export const getMyCreatedSharePoints = (filters = {}) => {
 export const getAllUsersForSelection = (page = 1, pageSize = 100) => {
   return getAdminUsers(page, pageSize)
 }
+
+// Fixed API endpoint path
 export const canUserSign = async (sharePointId, userId) => {
   try {
-    const response = await apiRequest("GET", `/api/sharepoint/${sharePointId}/can-sign/${userId}`)
+    const response = await apiRequest("GET", `${BASE_URL}/${sharePointId}/can-sign/${userId || ""}`)
     return response
   } catch (error) {
     console.error("Error checking sign permission:", error)

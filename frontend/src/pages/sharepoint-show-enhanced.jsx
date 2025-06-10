@@ -27,6 +27,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Separator } from "@/components/ui/separator"
 import {
   FileText,
   Calendar,
@@ -50,6 +51,7 @@ import {
   SortDesc,
   Shield,
   CheckCircle,
+  Activity,
 } from "lucide-react"
 import {
   getAllSharePoints,
@@ -68,36 +70,36 @@ const containerVariants = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.05,
+      staggerChildren: 0.03,
       delayChildren: 0.1,
     },
   },
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, y: 10 },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
-      duration: 0.4,
+      duration: 0.3,
       ease: "easeOut",
     },
   },
 }
 
 const cardVariants = {
-  hidden: { opacity: 0, scale: 0.95 },
+  hidden: { opacity: 0, scale: 0.98 },
   visible: {
     opacity: 1,
     scale: 1,
     transition: {
-      duration: 0.3,
+      duration: 0.2,
       ease: "easeOut",
     },
   },
   hover: {
-    scale: 1.02,
+    y: -2,
     transition: {
       duration: 0.2,
       ease: "easeInOut",
@@ -113,10 +115,10 @@ export default function SharePointShow() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [viewFilter, setViewFilter] = useState("all") // all, assigned, created
+  const [viewFilter, setViewFilter] = useState("all")
   const [sortBy, setSortBy] = useState("createdAt")
   const [sortOrder, setSortOrder] = useState("desc")
-  const [viewMode, setViewMode] = useState("grid") // grid, list
+  const [viewMode, setViewMode] = useState("grid")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -244,21 +246,21 @@ export default function SharePointShow() {
   const getStatusColor = (status) => {
     switch (status) {
       case "completed":
-        return "bg-green-100 text-green-800 border-green-200"
+        return "bg-emerald-50 text-emerald-700 border-emerald-200"
       case "in_progress":
-        return "bg-blue-100 text-blue-800 border-blue-200"
+        return "bg-blue-50 text-blue-700 border-blue-200"
       case "pending":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+        return "bg-amber-50 text-amber-700 border-amber-200"
       case "pending_approval":
-        return "bg-orange-100 text-orange-800 border-orange-200"
+        return "bg-orange-50 text-orange-700 border-orange-200"
       case "expired":
-        return "bg-red-100 text-red-800 border-red-200"
+        return "bg-red-50 text-red-700 border-red-200"
       case "cancelled":
-        return "bg-gray-100 text-gray-800 border-gray-200"
+        return "bg-gray-50 text-gray-700 border-gray-200"
       case "rejected":
-        return "bg-red-100 text-red-800 border-red-200"
+        return "bg-red-50 text-red-700 border-red-200"
       default:
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+        return "bg-gray-50 text-gray-700 border-gray-200"
     }
   }
 
@@ -296,26 +298,27 @@ export default function SharePointShow() {
     const completionPercentage = sharePoint.completionPercentage || 0
     const canEdit = sharePoint.createdBy?._id === currentUser?._id || currentUser?.roles?.includes("Admin")
 
-    // Make approval buttons visible for everyone
-    const canApprove = sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved
+    const canApprove =
+      currentUser?.roles?.includes("Admin") && sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved
 
-    // Make sign buttons visible for assigned users when manager approved
     const canSign =
       sharePoint?.managerApproved &&
       sharePoint?.usersToSign?.some((signer) => signer.user._id === currentUser?._id && !signer.hasSigned)
 
     return (
       <motion.div variants={cardVariants} whileHover="hover" layout>
-        <Card className="h-full transition-all duration-300 border-0 shadow-lg bg-white/80 backdrop-blur-sm hover:shadow-xl">
+        <Card className="h-full transition-all duration-200 hover:shadow-md border-border/50">
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <CardTitle className="text-lg font-semibold truncate">{sharePoint.title}</CardTitle>
-                <CardDescription className="text-sm">by {sharePoint.createdBy?.username}</CardDescription>
+                <CardTitle className="text-lg font-semibold truncate text-foreground">{sharePoint.title}</CardTitle>
+                <CardDescription className="text-sm text-muted-foreground">
+                  by {sharePoint.createdBy?.username}
+                </CardDescription>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" className="w-8 h-8 p-0">
                     <MoreHorizontal className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -348,7 +351,7 @@ export default function SharePointShow() {
               </DropdownMenu>
             </div>
             <div className="flex items-center gap-2 mt-2">
-              <Badge className={getStatusColor(sharePoint.status)}>
+              <Badge className={getStatusColor(sharePoint.status)} variant="outline">
                 {getStatusIcon(sharePoint.status)}
                 <span className="ml-1">{sharePoint.status?.replace("_", " ").toUpperCase()}</span>
               </Badge>
@@ -359,7 +362,7 @@ export default function SharePointShow() {
                 </Badge>
               )}
               {sharePoint.managerApproved && (
-                <Badge variant="outline" className="text-xs text-green-600 border-green-200 bg-green-50">
+                <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-200 bg-emerald-50">
                   <Shield className="w-3 h-3 mr-1" />
                   Approved
                 </Badge>
@@ -379,8 +382,8 @@ export default function SharePointShow() {
               <div className="space-y-1">
                 <p className="text-muted-foreground">Deadline</p>
                 <div className="flex items-center gap-1">
-                  <Calendar className="w-3 h-3" />
-                  <span className={isExpired ? "text-red-600 font-medium" : ""}>
+                  <Calendar className="w-3 h-3 text-muted-foreground" />
+                  <span className={isExpired ? "text-red-600 font-medium" : "text-foreground"}>
                     {sharePoint.deadline ? new Date(sharePoint.deadline).toLocaleDateString() : "N/A"}
                   </span>
                 </div>
@@ -388,8 +391,8 @@ export default function SharePointShow() {
               <div className="space-y-1">
                 <p className="text-muted-foreground">Signers</p>
                 <div className="flex items-center gap-1">
-                  <Users className="w-3 h-3" />
-                  <span>
+                  <Users className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-foreground">
                     {sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0}/
                     {sharePoint.usersToSign?.length || 0}
                   </span>
@@ -403,7 +406,7 @@ export default function SharePointShow() {
                   <TooltipProvider key={signer.user._id}>
                     <Tooltip>
                       <TooltipTrigger>
-                        <Avatar className="w-6 h-6 border-2 border-white">
+                        <Avatar className="w-6 h-6 border-2 border-background">
                           <AvatarImage src={signer.user.image || "/placeholder.svg"} />
                           <AvatarFallback className="text-xs">
                             {signer.user.username?.charAt(0).toUpperCase()}
@@ -418,8 +421,8 @@ export default function SharePointShow() {
                   </TooltipProvider>
                 ))}
                 {sharePoint.usersToSign?.length > 3 && (
-                  <div className="flex items-center justify-center w-6 h-6 bg-gray-100 border-2 border-white rounded-full">
-                    <span className="text-xs text-gray-600">+{sharePoint.usersToSign.length - 3}</span>
+                  <div className="flex items-center justify-center w-6 h-6 border-2 rounded-full bg-muted border-background">
+                    <span className="text-xs text-muted-foreground">+{sharePoint.usersToSign.length - 3}</span>
                   </div>
                 )}
               </div>
@@ -427,12 +430,11 @@ export default function SharePointShow() {
 
             {/* Action Buttons */}
             <div className="pt-2 space-y-2">
-              {/* Manager Approval Buttons */}
               {canApprove && (
                 <div className="flex gap-2">
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button size="sm" className="flex-1 bg-green-600 hover:bg-green-700">
+                      <Button size="sm" className="flex-1">
                         <Shield className="w-4 h-4 mr-2" />
                         Approve
                       </Button>
@@ -449,11 +451,7 @@ export default function SharePointShow() {
                         <Button variant="outline" disabled={isSubmitting}>
                           Cancel
                         </Button>
-                        <Button
-                          onClick={() => handleApprove(sharePoint._id, true)}
-                          disabled={isSubmitting}
-                          className="bg-green-600 hover:bg-green-700"
-                        >
+                        <Button onClick={() => handleApprove(sharePoint._id, true)} disabled={isSubmitting}>
                           {isSubmitting ? "Approving..." : "Approve"}
                         </Button>
                       </div>
@@ -490,20 +488,18 @@ export default function SharePointShow() {
                 </div>
               )}
 
-              {/* Quick Sign Button */}
               {canSign && (
                 <Button
                   size="sm"
                   onClick={() => handleQuickSign(sharePoint._id)}
                   disabled={isSubmitting}
-                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  className="w-full"
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   {isSubmitting ? "Signing..." : "Quick Sign"}
                 </Button>
               )}
 
-              {/* Default Action Buttons */}
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => handleViewDetail(sharePoint._id)} className="flex-1">
                   <Eye className="w-4 h-4 mr-2" />
@@ -528,36 +524,34 @@ export default function SharePointShow() {
     const isExpired = sharePoint.deadline && new Date(sharePoint.deadline) < new Date()
     const completionPercentage = sharePoint.completionPercentage || 0
     const canEdit = sharePoint.createdBy?._id === currentUser?._id || currentUser?.roles?.includes("Admin")
-    // Make approval buttons visible for everyone
-    const canApprove = sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved
-
-    // Make sign buttons visible for assigned users when manager approved
+    const canApprove =
+      currentUser?.roles?.includes("Admin") && sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved
     const canSign =
       sharePoint?.managerApproved &&
       sharePoint?.usersToSign?.some((signer) => signer.user._id === currentUser?._id && !signer.hasSigned)
 
     return (
       <motion.div variants={itemVariants}>
-        <Card className="transition-all duration-200 border-0 shadow-sm bg-white/80 backdrop-blur-sm hover:shadow-md">
+        <Card className="transition-all duration-200 hover:shadow-sm border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center flex-1 min-w-0 gap-4">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <FileText className="w-5 h-5 text-blue-600" />
+                <div className="p-2 rounded-lg bg-muted">
+                  <FileText className="w-5 h-5 text-muted-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold truncate">{sharePoint.title}</h3>
+                  <h3 className="font-semibold truncate text-foreground">{sharePoint.title}</h3>
                   <p className="text-sm text-muted-foreground">
                     by {sharePoint.createdBy?.username} •{" "}
                     {sharePoint.creationDate ? new Date(sharePoint.creationDate).toLocaleDateString() : "N/A"}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
-                    <Badge className={getStatusColor(sharePoint.status)}>
+                    <Badge className={getStatusColor(sharePoint.status)} variant="outline">
                       {getStatusIcon(sharePoint.status)}
                       <span className="ml-1">{sharePoint.status?.replace("_", " ").toUpperCase()}</span>
                     </Badge>
                     {sharePoint.managerApproved && (
-                      <Badge variant="outline" className="text-xs text-green-600 border-green-200 bg-green-50">
+                      <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-200 bg-emerald-50">
                         <Shield className="w-3 h-3 mr-1" />
                         Approved
                       </Badge>
@@ -568,12 +562,12 @@ export default function SharePointShow() {
 
               <div className="flex items-center gap-4">
                 <div className="text-center">
-                  <div className="text-sm font-medium">{completionPercentage}%</div>
+                  <div className="text-sm font-medium text-foreground">{completionPercentage}%</div>
                   <div className="text-xs text-muted-foreground">Complete</div>
                 </div>
 
                 <div className="text-center">
-                  <div className="text-sm font-medium">
+                  <div className="text-sm font-medium text-foreground">
                     {sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0}/
                     {sharePoint.usersToSign?.length || 0}
                   </div>
@@ -581,19 +575,18 @@ export default function SharePointShow() {
                 </div>
 
                 <div className="text-center min-w-[80px]">
-                  <div className={`text-sm font-medium ${isExpired ? "text-red-600" : ""}`}>
+                  <div className={`text-sm font-medium ${isExpired ? "text-red-600" : "text-foreground"}`}>
                     {sharePoint.deadline ? new Date(sharePoint.deadline).toLocaleDateString() : "N/A"}
                   </div>
                   <div className="text-xs text-muted-foreground">Deadline</div>
                 </div>
 
-                {/* Action Buttons for List View */}
                 <div className="flex items-center gap-2">
                   {canApprove && (
                     <>
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                          <Button size="sm">
                             <Shield className="w-4 h-4 mr-2" />
                             Approve
                           </Button>
@@ -609,11 +602,7 @@ export default function SharePointShow() {
                             <Button variant="outline" disabled={isSubmitting}>
                               Cancel
                             </Button>
-                            <Button
-                              onClick={() => handleApprove(sharePoint._id, true)}
-                              disabled={isSubmitting}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
+                            <Button onClick={() => handleApprove(sharePoint._id, true)} disabled={isSubmitting}>
                               {isSubmitting ? "Approving..." : "Approve"}
                             </Button>
                           </div>
@@ -648,12 +637,7 @@ export default function SharePointShow() {
                   )}
 
                   {canSign && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleQuickSign(sharePoint._id)}
-                      disabled={isSubmitting}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
+                    <Button size="sm" onClick={() => handleQuickSign(sharePoint._id)} disabled={isSubmitting}>
                       <CheckCircle className="w-4 h-4 mr-2" />
                       {isSubmitting ? "Signing..." : "Sign"}
                     </Button>
@@ -666,7 +650,7 @@ export default function SharePointShow() {
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" className="w-8 h-8 p-0">
                         <MoreHorizontal className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -703,28 +687,88 @@ export default function SharePointShow() {
 
   return (
     <MainLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      <div className="min-h-screen bg-background">
         <div className="container p-6 mx-auto max-w-7xl">
-          <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-8">
+          <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6">
             {/* Header */}
             <motion.div variants={itemVariants} className="flex items-center justify-between">
-              <div>
-                <h1 className="text-4xl font-bold text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text">
-                  SharePoint Documents
-                </h1>
-                <p className="mt-2 text-lg text-muted-foreground">Manage and track your document signatures</p>
+              <div className="space-y-1">
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">SharePoint Documents</h1>
+                <p className="text-muted-foreground">Manage and track your document signatures</p>
               </div>
-              <Button onClick={handleCreateNew} size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600">
+              <Button onClick={handleCreateNew} size="lg">
                 <Plus className="w-5 h-5 mr-2" />
-                Create New Document
+                Create Document
               </Button>
+            </motion.div>
+
+            {/* Stats Cards */}
+            <motion.div variants={itemVariants} className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <FileText className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Documents</p>
+                      <p className="text-2xl font-bold">{pagination.totalItems || 0}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-lg bg-amber-100">
+                      <Clock className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Pending Approval</p>
+                      <p className="text-2xl font-bold">
+                        {sharePoints.filter((sp) => sp.status === "pending_approval").length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Activity className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">In Progress</p>
+                      <p className="text-2xl font-bold">
+                        {sharePoints.filter((sp) => sp.status === "in_progress").length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-lg bg-emerald-100">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Completed</p>
+                      <p className="text-2xl font-bold">
+                        {sharePoints.filter((sp) => sp.status === "completed").length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </motion.div>
 
             {/* Filters and Search */}
             <motion.div variants={itemVariants}>
-              <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-                <CardContent className="p-6">
-                  <div className="flex flex-col gap-4 lg:flex-row">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
                     <div className="flex-1">
                       <div className="relative">
                         <Search className="absolute w-4 h-4 left-3 top-3 text-muted-foreground" />
@@ -783,6 +827,8 @@ export default function SharePointShow() {
                         {sortOrder === "asc" ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />}
                       </Button>
 
+                      <Separator orientation="vertical" className="h-8" />
+
                       <div className="flex border rounded-lg">
                         <Button
                           variant={viewMode === "grid" ? "default" : "ghost"}
@@ -815,27 +861,27 @@ export default function SharePointShow() {
             <motion.div variants={itemVariants}>
               {loading ? (
                 <div
-                  className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "space-y-4"}
+                  className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}
                 >
                   {[...Array(6)].map((_, i) => (
                     <Card key={i} className="animate-pulse">
                       <CardHeader>
-                        <div className="w-3/4 h-6 bg-gray-200 rounded"></div>
-                        <div className="w-1/2 h-4 bg-gray-200 rounded"></div>
+                        <div className="w-3/4 h-6 rounded bg-muted"></div>
+                        <div className="w-1/2 h-4 rounded bg-muted"></div>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-3">
-                          <div className="h-4 bg-gray-200 rounded"></div>
-                          <div className="w-2/3 h-4 bg-gray-200 rounded"></div>
+                          <div className="h-4 rounded bg-muted"></div>
+                          <div className="w-2/3 h-4 rounded bg-muted"></div>
                         </div>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
               ) : filteredSharePoints.length === 0 ? (
-                <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+                <Card>
                   <CardContent className="p-12 text-center">
-                    <FileText className="w-16 h-16 mx-auto mb-4 opacity-50 text-muted-foreground" />
+                    <FileText className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
                     <h3 className="mb-2 text-xl font-semibold">No documents found</h3>
                     <p className="mb-6 text-muted-foreground">
                       {searchTerm
@@ -857,7 +903,7 @@ export default function SharePointShow() {
                       initial="hidden"
                       animate="visible"
                       exit="hidden"
-                      className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
+                      className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
                     >
                       {filteredSharePoints.map((sharePoint) => (
                         <SharePointCard key={sharePoint._id} sharePoint={sharePoint} />
@@ -870,7 +916,7 @@ export default function SharePointShow() {
                       initial="hidden"
                       animate="visible"
                       exit="hidden"
-                      className="space-y-4"
+                      className="space-y-3"
                     >
                       {filteredSharePoints.map((sharePoint) => (
                         <SharePointListItem key={sharePoint._id} sharePoint={sharePoint} />
@@ -892,7 +938,7 @@ export default function SharePointShow() {
                   >
                     Previous
                   </Button>
-                  <span className="px-4 py-2 text-sm">
+                  <span className="px-4 py-2 text-sm text-muted-foreground">
                     Page {pagination.currentPage} of {pagination.totalPages}
                   </span>
                   <Button
