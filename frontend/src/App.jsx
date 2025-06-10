@@ -13,9 +13,11 @@ import EditUserRoles from "./pages/roleMangement/EditUserRoles"
 import CreateUser from "./pages/roleMangement/CreateUser"
 
 // SharePoint Pages
+import SharepointShow from "./pages/sharepoint-show-enhanced"
 import SharepointForm from "./pages/sharepoint-form"
 import SharepointDetail from "./pages/sharepoint-detail-enhanced"
-import Sharepointshow from "./pages/sharepoint-show-enhanced"
+import SharepointEdit from "./pages/sharepoint-edit"
+import SharepointAssigned from "./pages/sharepoint-assigned"
 
 // User Pages
 import ProfilePage from "./pages/user/profile-page"
@@ -25,9 +27,9 @@ function App() {
   const adminRoles = ["Admin"]
   const productionRoles = [
     "Manager",
-    "Admin", 
-    "PRODUCCION", 
-    "Manufacturing Eng. Manager", 
+    "Admin",
+    "PRODUCCION",
+    "Manufacturing Eng. Manager",
     "Manufacturing Eng. Leader",
     "Project Manager",
     "Business Manager",
@@ -41,7 +43,7 @@ function App() {
     "Quality Manager",
     "Quality Leader UAP1",
     "Quality Leader UAP2",
-    "Quality Leader UAP3"
+    "Quality Leader UAP3",
   ]
 
   return (
@@ -52,12 +54,12 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 
-        {/* Home route - redirect to sharepoint form */}
+        {/* Home route - redirect to sharepoint list */}
         <Route
           path="/"
           element={
             <ProtectedRoute requiredRoles={productionRoles}>
-              <Sharepointshow />
+              <SharepointShow />
             </ProtectedRoute>
           }
         />
@@ -67,7 +69,7 @@ function App() {
           path="/sharepoint"
           element={
             <ProtectedRoute requiredRoles={productionRoles}>
-              <Sharepointshow />
+              <SharepointShow />
             </ProtectedRoute>
           }
         />
@@ -84,6 +86,22 @@ function App() {
           element={
             <ProtectedRoute requiredRoles={productionRoles}>
               <SharepointDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sharepoint/:id/edit"
+          element={
+            <ProtectedRoute requiredRoles={productionRoles}>
+              <SharepointEdit />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sharepoint/assigned"
+          element={
+            <ProtectedRoute requiredRoles={productionRoles}>
+              <SharepointAssigned />
             </ProtectedRoute>
           }
         />

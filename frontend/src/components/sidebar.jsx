@@ -3,7 +3,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react"
 import { Link, useLocation } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { LayoutDashboard, Settings, HelpCircle, ChevronDown, Search, FileText, ClipboardCheck, FileCheck, Shield, User } from 'lucide-react'
+import {
+  LayoutDashboard,
+  Settings,
+  HelpCircle,
+  ChevronDown,
+  Search,
+  FileText,
+  ClipboardCheck,
+  FileCheck,
+  Shield,
+  User,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -47,7 +58,7 @@ const navigationItems = [
         id: "assigned-documents",
         label: "Assigned to Me",
         icon: ClipboardCheck,
-        path: "/sharepoint?filter=assigned",
+        path: "/sharepoint/assigned",
       },
     ],
   },

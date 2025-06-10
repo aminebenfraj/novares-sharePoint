@@ -1,6 +1,27 @@
 const SharePoint = require("../models/SharePoint")
 const User = require("../models/UserModel")
 
+// Helper function to calculate completion percentage and status
+const calculateCompletionData = (sharePoint) => {
+  const totalSigners = sharePoint.usersToSign?.length || 0
+  const signedCount = sharePoint.usersToSign?.filter((signer) => signer.hasSigned).length || 0
+
+  const completionPercentage = totalSigners > 0 ? Math.round((signedCount / totalSigners) * 100) : 0
+  const allUsersSigned = totalSigners > 0 && signedCount === totalSigners
+
+  // Update status based on completion
+  let status = sharePoint.status
+  if (allUsersSigned && sharePoint.managerApproved) {
+    status = "completed"
+  } else if (signedCount > 0 && sharePoint.managerApproved) {
+    status = "in_progress"
+  } else if (sharePoint.managerApproved) {
+    status = "pending"
+  }
+
+  return { completionPercentage, allUsersSigned, status }
+}
+
 // Create a new SharePoint
 exports.createSharePoint = async (req, res) => {
   try {
@@ -35,7 +56,7 @@ exports.createSharePoint = async (req, res) => {
       deadline: new Date(deadline),
       createdBy: req.user._id,
       usersToSign: usersToSign.map((userId) => ({ user: userId })),
-      status: "pending_approval", // Set initial status to pending approval
+      status: "pending_approval",
       updateHistory: [
         {
           action: "created",
@@ -51,9 +72,16 @@ exports.createSharePoint = async (req, res) => {
       { path: "usersToSign.user", select: "username email roles" },
     ])
 
+    // Calculate completion data
+    const completionData = calculateCompletionData(sharePoint)
+    const responseData = {
+      ...sharePoint.toObject(),
+      ...completionData,
+    }
+
     res.status(201).json({
       message: "SharePoint created successfully. Waiting for manager approval before users can sign.",
-      sharePoint,
+      sharePoint: responseData,
     })
   } catch (error) {
     console.error("Error creating SharePoint:", error)
@@ -87,10 +115,16 @@ exports.getAllSharePoints = async (req, res) => {
       .limit(Number.parseInt(limit))
       .lean()
 
+    // Add completion data to each sharePoint
+    const sharePointsWithCompletion = sharePoints.map((sharePoint) => {
+      const completionData = calculateCompletionData(sharePoint)
+      return { ...sharePoint, ...completionData }
+    })
+
     const total = await SharePoint.countDocuments(filter)
 
     res.json({
-      sharePoints,
+      sharePoints: sharePointsWithCompletion,
       pagination: {
         currentPage: Number.parseInt(page),
         totalPages: Math.ceil(total / limit),
@@ -131,10 +165,171 @@ exports.getSharePointById = async (req, res) => {
       return res.status(403).json({ error: "You don't have permission to view this SharePoint" })
     }
 
-    res.json(sharePoint)
+    // Calculate completion data
+    const completionData = calculateCompletionData(sharePoint)
+    const responseData = {
+      ...sharePoint.toObject(),
+      ...completionData,
+    }
+
+    res.json(responseData)
   } catch (error) {
     console.error("Error fetching SharePoint:", error)
     res.status(500).json({ error: "Error fetching SharePoint", details: error.message })
+  }
+}
+
+// Sign SharePoint - UPDATED to properly update status
+exports.signSharePoint = async (req, res) => {
+  try {
+    const { signatureNote } = req.body
+    const sharePoint = await SharePoint.findById(req.params.id)
+
+    if (!sharePoint) {
+      return res.status(404).json({ error: "SharePoint not found" })
+    }
+
+    // Check if manager has approved the document first
+    if (!sharePoint.managerApproved) {
+      return res.status(403).json({
+        error: "Document must be approved by a manager before users can sign it",
+        code: "MANAGER_APPROVAL_REQUIRED",
+      })
+    }
+
+    // Check if user is in the signers list
+    const signerIndex = sharePoint.usersToSign.findIndex((signer) => signer.user.toString() === req.user._id.toString())
+
+    if (signerIndex === -1) {
+      return res.status(403).json({ error: "You are not authorized to sign this SharePoint" })
+    }
+
+    // Check if already signed
+    if (sharePoint.usersToSign[signerIndex].hasSigned) {
+      return res.status(400).json({ error: "You have already signed this SharePoint" })
+    }
+
+    // Update signature
+    sharePoint.usersToSign[signerIndex].hasSigned = true
+    sharePoint.usersToSign[signerIndex].signedAt = new Date()
+    if (signatureNote) {
+      sharePoint.usersToSign[signerIndex].signatureNote = signatureNote
+    }
+
+    // Calculate completion and update status
+    const completionData = calculateCompletionData(sharePoint)
+    sharePoint.status = completionData.status
+
+    // Add to history
+    sharePoint.updateHistory.push({
+      action: "signed",
+      performedBy: req.user._id,
+      details: signatureNote ? `Signed with note: ${signatureNote}` : "Signed",
+    })
+
+    await sharePoint.save()
+    await sharePoint.populate([
+      { path: "createdBy", select: "username email roles" },
+      { path: "usersToSign.user", select: "username email roles" },
+    ])
+
+    // Add completion data to response
+    const responseData = {
+      ...sharePoint.toObject(),
+      ...completionData,
+    }
+
+    res.json({
+      message: "SharePoint signed successfully",
+      sharePoint: responseData,
+    })
+  } catch (error) {
+    console.error("Error signing SharePoint:", error)
+    res.status(500).json({ error: "Error signing SharePoint" })
+  }
+}
+
+// Get SharePoints assigned to current user
+exports.getMyAssignedSharePoints = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10 } = req.query
+    const filter = {
+      "usersToSign.user": req.user._id,
+    }
+
+    if (status) filter.status = status
+
+    const skip = (page - 1) * limit
+    const sharePoints = await SharePoint.find(filter)
+      .populate("createdBy", "username email roles")
+      .populate("usersToSign.user", "username email roles")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number.parseInt(limit))
+      .lean()
+
+    // Add completion data to each sharePoint
+    const sharePointsWithCompletion = sharePoints.map((sharePoint) => {
+      const completionData = calculateCompletionData(sharePoint)
+      return { ...sharePoint, ...completionData }
+    })
+
+    const total = await SharePoint.countDocuments(filter)
+
+    res.json({
+      sharePoints: sharePointsWithCompletion,
+      pagination: {
+        currentPage: Number.parseInt(page),
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+        itemsPerPage: Number.parseInt(limit),
+      },
+    })
+  } catch (error) {
+    console.error("Error fetching assigned SharePoints:", error)
+    res.status(500).json({ error: "Error fetching assigned SharePoints" })
+  }
+}
+
+// Get SharePoints created by current user
+exports.getMyCreatedSharePoints = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10 } = req.query
+    const filter = {
+      createdBy: req.user._id,
+    }
+
+    if (status) filter.status = status
+
+    const skip = (page - 1) * limit
+    const sharePoints = await SharePoint.find(filter)
+      .populate("createdBy", "username email roles")
+      .populate("usersToSign.user", "username email roles")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number.parseInt(limit))
+      .lean()
+
+    // Add completion data to each sharePoint
+    const sharePointsWithCompletion = sharePoints.map((sharePoint) => {
+      const completionData = calculateCompletionData(sharePoint)
+      return { ...sharePoint, ...completionData }
+    })
+
+    const total = await SharePoint.countDocuments(filter)
+
+    res.json({
+      sharePoints: sharePointsWithCompletion,
+      pagination: {
+        currentPage: Number.parseInt(page),
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+        itemsPerPage: Number.parseInt(limit),
+      },
+    })
+  } catch (error) {
+    console.error("Error fetching created SharePoints:", error)
+    res.status(500).json({ error: "Error fetching created SharePoints" })
   }
 }
 
@@ -201,9 +396,16 @@ exports.updateSharePoint = async (req, res) => {
       { path: "approvedBy", select: "username email" },
     ])
 
+    // Calculate completion data
+    const completionData = calculateCompletionData(updatedSharePoint)
+    const responseData = {
+      ...updatedSharePoint.toObject(),
+      ...completionData,
+    }
+
     res.json({
       message: "SharePoint updated successfully",
-      sharePoint: updatedSharePoint,
+      sharePoint: responseData,
     })
   } catch (error) {
     console.error("Error updating SharePoint:", error)
@@ -231,74 +433,6 @@ exports.deleteSharePoint = async (req, res) => {
   } catch (error) {
     console.error("Error deleting SharePoint:", error)
     res.status(500).json({ error: "Error deleting SharePoint" })
-  }
-}
-
-// Sign SharePoint - UPDATED to require manager approval first
-exports.signSharePoint = async (req, res) => {
-  try {
-    const { signatureNote } = req.body
-    const sharePoint = await SharePoint.findById(req.params.id)
-
-    if (!sharePoint) {
-      return res.status(404).json({ error: "SharePoint not found" })
-    }
-
-    // NEW: Check if manager has approved the document first
-    if (!sharePoint.managerApproved) {
-      return res.status(403).json({
-        error: "Document must be approved by a manager before users can sign it",
-        code: "MANAGER_APPROVAL_REQUIRED",
-      })
-    }
-
-    // Check if user is in the signers list
-    const signerIndex = sharePoint.usersToSign.findIndex((signer) => signer.user.toString() === req.user._id.toString())
-
-    if (signerIndex === -1) {
-      return res.status(403).json({ error: "You are not authorized to sign this SharePoint" })
-    }
-
-    // Check if already signed
-    if (sharePoint.usersToSign[signerIndex].hasSigned) {
-      return res.status(400).json({ error: "You have already signed this SharePoint" })
-    }
-
-    // Update signature
-    sharePoint.usersToSign[signerIndex].hasSigned = true
-    sharePoint.usersToSign[signerIndex].signedAt = new Date()
-    if (signatureNote) {
-      sharePoint.usersToSign[signerIndex].signatureNote = signatureNote
-    }
-
-    // Update status based on signing progress
-    const allSigned = sharePoint.usersToSign.every((signer) => signer.hasSigned)
-    if (allSigned) {
-      sharePoint.status = "completed"
-    } else {
-      sharePoint.status = "in_progress"
-    }
-
-    // Add to history
-    sharePoint.updateHistory.push({
-      action: "signed",
-      performedBy: req.user._id,
-      details: signatureNote ? `Signed with note: ${signatureNote}` : "Signed",
-    })
-
-    await sharePoint.save()
-    await sharePoint.populate([
-      { path: "createdBy", select: "username email roles" },
-      { path: "usersToSign.user", select: "username email roles" },
-    ])
-
-    res.json({
-      message: "SharePoint signed successfully",
-      sharePoint,
-    })
-  } catch (error) {
-    console.error("Error signing SharePoint:", error)
-    res.status(500).json({ error: "Error signing SharePoint" })
   }
 }
 
@@ -348,9 +482,16 @@ exports.approveSharePoint = async (req, res) => {
       { path: "approvedBy", select: "username email" },
     ])
 
+    // Calculate completion data
+    const completionData = calculateCompletionData(sharePoint)
+    const responseData = {
+      ...sharePoint.toObject(),
+      ...completionData,
+    }
+
     res.json({
       message: `SharePoint ${approved ? "approved" : "rejected"} successfully`,
-      sharePoint,
+      sharePoint: responseData,
     })
   } catch (error) {
     console.error("Error approving SharePoint:", error)
@@ -358,7 +499,7 @@ exports.approveSharePoint = async (req, res) => {
   }
 }
 
-// NEW: Check if user can sign (requires manager approval)
+// Check if user can sign (requires manager approval)
 exports.canUserSign = async (req, res) => {
   try {
     const sharePoint = await SharePoint.findById(req.params.id)
@@ -385,77 +526,5 @@ exports.canUserSign = async (req, res) => {
   } catch (error) {
     console.error("Error checking sign permission:", error)
     res.status(500).json({ error: "Error checking sign permission" })
-  }
-}
-
-// Get SharePoints assigned to current user
-exports.getMyAssignedSharePoints = async (req, res) => {
-  try {
-    const { status, page = 1, limit = 10 } = req.query
-    const filter = {
-      "usersToSign.user": req.user._id,
-    }
-
-    if (status) filter.status = status
-
-    const skip = (page - 1) * limit
-    const sharePoints = await SharePoint.find(filter)
-      .populate("createdBy", "username email roles")
-      .populate("usersToSign.user", "username email roles")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number.parseInt(limit))
-      .lean()
-
-    const total = await SharePoint.countDocuments(filter)
-
-    res.json({
-      sharePoints,
-      pagination: {
-        currentPage: Number.parseInt(page),
-        totalPages: Math.ceil(total / limit),
-        totalItems: total,
-        itemsPerPage: Number.parseInt(limit),
-      },
-    })
-  } catch (error) {
-    console.error("Error fetching assigned SharePoints:", error)
-    res.status(500).json({ error: "Error fetching assigned SharePoints" })
-  }
-}
-
-// Get SharePoints created by current user
-exports.getMyCreatedSharePoints = async (req, res) => {
-  try {
-    const { status, page = 1, limit = 10 } = req.query
-    const filter = {
-      createdBy: req.user._id,
-    }
-
-    if (status) filter.status = status
-
-    const skip = (page - 1) * limit
-    const sharePoints = await SharePoint.find(filter)
-      .populate("createdBy", "username email roles")
-      .populate("usersToSign.user", "username email roles")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number.parseInt(limit))
-      .lean()
-
-    const total = await SharePoint.countDocuments(filter)
-
-    res.json({
-      sharePoints,
-      pagination: {
-        currentPage: Number.parseInt(page),
-        totalPages: Math.ceil(total / limit),
-        totalItems: total,
-        itemsPerPage: Number.parseInt(limit),
-      },
-    })
-  } catch (error) {
-    console.error("Error fetching created SharePoints:", error)
-    res.status(500).json({ error: "Error fetching created SharePoints" })
   }
 }
