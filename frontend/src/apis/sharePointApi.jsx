@@ -104,3 +104,12 @@ export const getMyCreatedSharePoints = (filters = {}) => {
 export const getAllUsersForSelection = (page = 1, pageSize = 100) => {
   return getAdminUsers(page, pageSize)
 }
+export const canUserSign = async (sharePointId, userId) => {
+  try {
+    const response = await apiRequest("GET", `/api/sharepoint/${sharePointId}/can-sign/${userId}`)
+    return response
+  } catch (error) {
+    console.error("Error checking sign permission:", error)
+    throw error
+  }
+}

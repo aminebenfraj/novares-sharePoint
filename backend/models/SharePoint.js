@@ -101,8 +101,8 @@ const sharePointSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending", "in_progress", "completed", "expired", "cancelled"],
-      default: "pending",
+      enum: ["pending_approval", "pending", "in_progress", "completed", "expired", "cancelled", "rejected"],
+      default: "pending_approval", // Changed default to pending_approval
     },
 
     fileMetadata: {
@@ -135,17 +135,26 @@ sharePointSchema.virtual("completionPercentage").get(function () {
   return Math.round((signedCount / this.usersToSign.length) * 100)
 })
 
+// Updated pre-save middleware to handle the new workflow
 sharePointSchema.pre("save", function (next) {
-  // Only update status if manager has approved
-  if (this.managerApproved) {
-    if (this.allUsersSigned && this.departmentApprover) {
-      this.status = "completed"
-    } else if (this.usersToSign.some((user) => user.hasSigned)) {
-      this.status = "in_progress"
-    }
+  // Only allow status changes if manager has approved (except for rejection)
+  if (this.status !== "rejected" && this.status !== "pending_approval") {
+    if (!this.managerApproved) {
+      this.status = "pending_approval"
+    } else {
+      // Manager has approved, now check signing status
+      if (this.allUsersSigned && this.departmentApprover) {
+        this.status = "completed"
+      } else if (this.usersToSign.some((user) => user.hasSigned)) {
+        this.status = "in_progress"
+      } else {
+        this.status = "pending" // Approved but no signatures yet
+      }
 
-    if (new Date() > this.deadline && this.status !== "completed") {
-      this.status = "expired"
+      // Check for expiration
+      if (new Date() > this.deadline && this.status !== "completed") {
+        this.status = "expired"
+      }
     }
   }
 

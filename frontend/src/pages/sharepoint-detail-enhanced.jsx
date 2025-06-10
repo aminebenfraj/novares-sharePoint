@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { useParams, useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -92,12 +92,21 @@ const cardVariants = {
   },
 }
 
-export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
+export default function SharePointDetail({
+  id: propId,
+  currentUser: propCurrentUser,
+  onBack: propOnBack,
+  onEdit: propOnEdit,
+}) {
   const navigate = useNavigate()
+  const params = useParams()
   const { user } = useAuth()
 
+  // Get ID from props first, then from URL params, then from current location
+  const documentId = propId || params.id || window.location.pathname.split("/").pop()
+
   // Use currentUser prop if provided, otherwise fall back to useAuth
-  const activeUser = currentUser || user
+  const activeUser = propCurrentUser || user
 
   const [sharePoint, setSharePoint] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -109,35 +118,45 @@ export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const handleBack = () => {
-    if (onBack) {
-      onBack()
-    } else {
+    if (propOnBack) {
+      propOnBack()
+    } else if (navigate) {
       navigate("/sharepoint")
+    } else {
+      window.history.back()
     }
   }
 
   const handleEdit = () => {
-    if (onEdit) {
-      onEdit()
+    if (propOnEdit) {
+      propOnEdit(documentId)
+    } else if (navigate) {
+      navigate(`/sharepoint/${documentId}/edit`)
     } else {
-      navigate(`/sharepoint/${id}/edit`)
+      window.location.href = `/sharepoint/${documentId}/edit`
     }
   }
 
   useEffect(() => {
-    if (id) {
+    if (documentId && documentId !== "undefined" && documentId !== "null") {
       loadSharePointDetails()
     } else {
       setError("No document ID provided")
       setLoading(false)
+      console.error("SharePoint Detail: No valid document ID found", {
+        propId,
+        paramsId: params?.id,
+        pathname: window.location.pathname,
+      })
     }
-  }, [id])
+  }, [documentId])
 
   const loadSharePointDetails = async () => {
     try {
       setLoading(true)
       setError(null)
-      const data = await getSharePointById(id)
+      console.log("Loading SharePoint details for ID:", documentId)
+      const data = await getSharePointById(documentId)
       setSharePoint(data)
     } catch (err) {
       console.error("Error loading SharePoint details:", err)
@@ -155,7 +174,7 @@ export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
   const handleSign = async () => {
     try {
       setIsSubmitting(true)
-      await signSharePoint(id, signatureNote)
+      await signSharePoint(documentId, signatureNote)
       toast({
         title: "Document Signed",
         description: "You have successfully signed this document.",
@@ -178,7 +197,7 @@ export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
   const handleApprove = async (approved) => {
     try {
       setIsSubmitting(true)
-      await approveSharePoint(id, approved)
+      await approveSharePoint(documentId, approved)
       toast({
         title: approved ? "Document Approved" : "Document Rejected",
         description: approved ? "You have successfully approved this document." : "You have rejected this document.",
@@ -200,7 +219,7 @@ export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
   const handleDelete = async () => {
     try {
       setIsSubmitting(true)
-      await deleteSharePoint(id)
+      await deleteSharePoint(documentId)
       toast({
         title: "Document Deleted",
         description: "The document has been successfully deleted.",
@@ -225,12 +244,18 @@ export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
         return "bg-green-100 text-green-800 border-green-200"
       case "in_progress":
         return "bg-blue-100 text-blue-800 border-blue-200"
+      case "pending":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+      case "pending_approval":
+        return "bg-orange-100 text-orange-800 border-orange-200"
       case "expired":
         return "bg-red-100 text-red-800 border-red-200"
       case "cancelled":
         return "bg-gray-100 text-gray-800 border-gray-200"
+      case "rejected":
+        return "bg-red-100 text-red-800 border-red-200"
       default:
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+        return "bg-gray-100 text-gray-800 border-gray-200"
     }
   }
 
@@ -240,9 +265,15 @@ export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
         return <CheckCircle2 className="w-4 h-4" />
       case "in_progress":
         return <Clock className="w-4 h-4" />
+      case "pending":
+        return <AlertCircle className="w-4 h-4" />
+      case "pending_approval":
+        return <Shield className="w-4 h-4" />
       case "expired":
         return <Timer className="w-4 h-4" />
       case "cancelled":
+        return <XCircle className="w-4 h-4" />
+      case "rejected":
         return <XCircle className="w-4 h-4" />
       default:
         return <AlertCircle className="w-4 h-4" />
@@ -275,6 +306,7 @@ export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
           <div className="space-y-4 text-center">
             <div className="inline-block w-12 h-12 border-4 border-blue-200 rounded-full border-t-blue-600 animate-spin"></div>
             <h3 className="text-xl font-medium text-gray-700">Loading document details...</h3>
+            <p className="text-sm text-gray-500">Document ID: {documentId}</p>
           </div>
         </div>
       </MainLayout>
@@ -294,12 +326,21 @@ export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
               <Alert variant="destructive">
                 <AlertCircle className="w-4 h-4" />
                 <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{error || "Document not found or access denied."}</AlertDescription>
+                <AlertDescription>
+                  {error || "Document not found or access denied."}
+                  <br />
+                  <span className="text-xs">Document ID: {documentId}</span>
+                </AlertDescription>
               </Alert>
-              <Button onClick={handleBack} className="w-full">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Go Back
-              </Button>
+              <div className="space-y-2">
+                <Button onClick={handleBack} className="w-full">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Go Back
+                </Button>
+                <Button onClick={loadSharePointDetails} variant="outline" className="w-full">
+                  Try Again
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -310,10 +351,13 @@ export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
   const isExpired = sharePoint && new Date(sharePoint.deadline) < new Date()
   const completionPercentage = sharePoint?.completionPercentage || 0
   const canEdit = sharePoint?.createdBy?._id === activeUser?._id || activeUser?.roles?.includes("Admin")
-  const canApprove = activeUser?.roles?.some((role) =>
-    ["Admin", "Manager", "Project Manager", "Business Manager"].includes(role),
-  )
-  const canSign = sharePoint?.usersToSign?.some((signer) => signer.user._id === activeUser?._id && !signer.hasSigned)
+  const canSign =
+    sharePoint?.managerApproved &&
+    sharePoint?.usersToSign?.some((signer) => signer.user._id === activeUser?._id && !signer.hasSigned)
+  const canApprove =
+    activeUser?.roles?.some((role) => ["Admin", "Manager", "Project Manager", "Business Manager"].includes(role)) &&
+    sharePoint?.status === "pending_approval" &&
+    !sharePoint?.managerApproved
   const hasManagerApproved = sharePoint?.managerApproved
   const allSigned = sharePoint?.allUsersSigned
   const hasDepartmentApprover = sharePoint?.departmentApprover
@@ -1013,11 +1057,28 @@ export default function SharePointDetail({ id, currentUser, onBack, onEdit }) {
                             </div>
                           )}
 
-                          {canApprove && !hasManagerApproved && allSigned && (
+                          {/* Show message when manager approval is required */}
+                          {sharePoint?.usersToSign?.some((signer) => signer.user._id === activeUser?._id) &&
+                            !sharePoint?.managerApproved && (
+                              <div className="space-y-2">
+                                <h3 className="font-medium">Signature Required</h3>
+                                <Alert className="border-orange-200 bg-orange-50">
+                                  <Shield className="w-4 h-4 text-orange-600" />
+                                  <AlertTitle>Manager Approval Required</AlertTitle>
+                                  <AlertDescription>
+                                    This document must be approved by a manager before you can sign it. You will be
+                                    notified once approval is granted.
+                                  </AlertDescription>
+                                </Alert>
+                              </div>
+                            )}
+
+                          {canApprove && (
                             <div className="space-y-2">
-                              <h3 className="font-medium">Manager Approval</h3>
+                              <h3 className="font-medium">Manager Approval Required</h3>
                               <p className="text-sm text-muted-foreground">
-                                All users have signed this document. As a manager, you can approve or reject it.
+                                This document is waiting for manager approval. Once approved, assigned users can sign
+                                it.
                               </p>
                               <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
                                 <DialogTrigger asChild>

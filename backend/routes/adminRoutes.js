@@ -12,7 +12,7 @@ const {
 const { protect, verifyAdmin } = require("../middlewares/authMiddleware");
 
 // 🔹 Admin Only Routes
-router.get("/all", protect, verifyAdmin, getAllUsers);
+router.get("/all", getAllUsers);
 router.get("/:license", protect, verifyAdmin, getUserByLicense);
 router.post("/create", protect, verifyAdmin, createUser);
 router.put("/update/:license", protect, verifyAdmin, adminUpdateUser);

@@ -12,5 +12,6 @@ router.post('/:id/sign', protect, sharePointController.signSharePoint);
 router.post('/:id/approve', protect, sharePointController.approveSharePoint);
 router.get('/my-assigned', protect, sharePointController.getMyAssignedSharePoints);
 router.get('/my-created', protect, sharePointController.getMyCreatedSharePoints);
-
+router.get('/', protect, sharePointController.getMyCreatedSharePoints);
+router.get("/:id/can-sign/:userId?", sharePointController.canUserSign)
 module.exports = router;

@@ -35,11 +35,12 @@ exports.createSharePoint = async (req, res) => {
       deadline: new Date(deadline),
       createdBy: req.user._id,
       usersToSign: usersToSign.map((userId) => ({ user: userId })),
+      status: "pending_approval", // Set initial status to pending approval
       updateHistory: [
         {
           action: "created",
           performedBy: req.user._id,
-          details: `SharePoint created with title: ${title}`,
+          details: `SharePoint created with title: ${title}. Waiting for manager approval.`,
         },
       ],
     })
@@ -51,7 +52,7 @@ exports.createSharePoint = async (req, res) => {
     ])
 
     res.status(201).json({
-      message: "SharePoint created successfully",
+      message: "SharePoint created successfully. Waiting for manager approval before users can sign.",
       sharePoint,
     })
   } catch (error) {
@@ -107,7 +108,7 @@ exports.getAllSharePoints = async (req, res) => {
 exports.getSharePointById = async (req, res) => {
   try {
     if (!req.user || !req.user.roles) {
-      console.log("req.user or req.user.roles is undefined:", req.user);
+      console.log("req.user or req.user.roles is undefined:", req.user)
       return res.status(401).json({ error: "Authentication required", details: "User or roles not found" })
     }
 
@@ -233,7 +234,7 @@ exports.deleteSharePoint = async (req, res) => {
   }
 }
 
-// Sign SharePoint
+// Sign SharePoint - UPDATED to require manager approval first
 exports.signSharePoint = async (req, res) => {
   try {
     const { signatureNote } = req.body
@@ -241,6 +242,14 @@ exports.signSharePoint = async (req, res) => {
 
     if (!sharePoint) {
       return res.status(404).json({ error: "SharePoint not found" })
+    }
+
+    // NEW: Check if manager has approved the document first
+    if (!sharePoint.managerApproved) {
+      return res.status(403).json({
+        error: "Document must be approved by a manager before users can sign it",
+        code: "MANAGER_APPROVAL_REQUIRED",
+      })
     }
 
     // Check if user is in the signers list
@@ -260,6 +269,14 @@ exports.signSharePoint = async (req, res) => {
     sharePoint.usersToSign[signerIndex].signedAt = new Date()
     if (signatureNote) {
       sharePoint.usersToSign[signerIndex].signatureNote = signatureNote
+    }
+
+    // Update status based on signing progress
+    const allSigned = sharePoint.usersToSign.every((signer) => signer.hasSigned)
+    if (allSigned) {
+      sharePoint.status = "completed"
+    } else {
+      sharePoint.status = "in_progress"
     }
 
     // Add to history
@@ -285,7 +302,7 @@ exports.signSharePoint = async (req, res) => {
   }
 }
 
-// Approve SharePoint (Manager only)
+// Approve SharePoint (Manager only) - UPDATED to enable signing after approval
 exports.approveSharePoint = async (req, res) => {
   try {
     const { approved } = req.body
@@ -308,11 +325,20 @@ exports.approveSharePoint = async (req, res) => {
     sharePoint.approvedBy = req.user._id
     sharePoint.approvedAt = new Date()
 
+    // Update status based on approval
+    if (approved) {
+      sharePoint.status = "pending" // Ready for signing
+    } else {
+      sharePoint.status = "rejected"
+    }
+
     // Add to history
     sharePoint.updateHistory.push({
       action: approved ? "approved" : "rejected",
       performedBy: req.user._id,
-      details: approved ? "SharePoint approved by manager" : "SharePoint rejected by manager",
+      details: approved
+        ? "SharePoint approved by manager. Users can now sign the document."
+        : "SharePoint rejected by manager",
     })
 
     await sharePoint.save()
@@ -329,6 +355,36 @@ exports.approveSharePoint = async (req, res) => {
   } catch (error) {
     console.error("Error approving SharePoint:", error)
     res.status(500).json({ error: "Error approving SharePoint" })
+  }
+}
+
+// NEW: Check if user can sign (requires manager approval)
+exports.canUserSign = async (req, res) => {
+  try {
+    const sharePoint = await SharePoint.findById(req.params.id)
+
+    if (!sharePoint) {
+      return res.status(404).json({ error: "SharePoint not found" })
+    }
+
+    const userId = req.params.userId || req.user._id
+    const isAssignedSigner = sharePoint.usersToSign.some((signer) => signer.user.toString() === userId.toString())
+
+    const canSign = sharePoint.managerApproved && isAssignedSigner
+
+    res.json({
+      canSign,
+      managerApproved: sharePoint.managerApproved,
+      isAssignedSigner,
+      reason: !sharePoint.managerApproved
+        ? "Manager approval required before signing"
+        : !isAssignedSigner
+          ? "User not assigned to sign this document"
+          : "User can sign",
+    })
+  } catch (error) {
+    console.error("Error checking sign permission:", error)
+    res.status(500).json({ error: "Error checking sign permission" })
   }
 }
 
