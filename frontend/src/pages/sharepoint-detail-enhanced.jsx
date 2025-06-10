@@ -1127,23 +1127,222 @@ export default function SharePointDetail({
                             </div>
                           )}
 
-                          {!canSign && !canApprove && !hasManagerApproved && (
-                            <div className="p-4 text-center border rounded-lg bg-slate-50">
-                              <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                              <p className="text-muted-foreground">No actions available for you at this time.</p>
+                          {/* Sign buttons for assigned users after manager approval */}
+                          {hasManagerApproved && (
+                            <div className="space-y-4">
+                              <h3 className="font-medium">Document Approved by Manager</h3>
+                              <Alert className="border-green-200 bg-green-50">
+                                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                                <AlertTitle>Document Approved</AlertTitle>
+                                <AlertDescription>
+                                  This document has been approved by {sharePoint.approvedBy?.username || "a manager"} on{" "}
+                                  {formatDate(sharePoint.approvedAt)}.
+                                </AlertDescription>
+                              </Alert>
+
+                              {/* Show sign button for current user if they're assigned and haven't signed yet */}
+                              {sharePoint?.usersToSign?.some(
+                                (signer) => signer.user._id === activeUser?._id && !signer.hasSigned,
+                              ) ? (
+                                <div className="mt-4 space-y-2">
+                                  <h3 className="font-medium">Your Signature Required</h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    You are assigned to sign this document. Please review and sign it.
+                                  </p>
+                                  <Dialog open={showSignDialog} onOpenChange={setShowSignDialog}>
+                                    <DialogTrigger asChild>
+                                      <Button className="w-full bg-gradient-to-r from-blue-600 to-indigo-600">
+                                        <CheckCircle className="w-4 h-4 mr-2" />
+                                        Sign Document Now
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                      <DialogHeader>
+                                        <DialogTitle>Sign Document</DialogTitle>
+                                        <DialogDescription>
+                                          You are about to sign "{sharePoint.title}". This action cannot be undone.
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                      <div className="mt-4 space-y-4">
+                                        <div className="p-4 border rounded-lg bg-blue-50">
+                                          <h4 className="mb-2 font-medium">Document Information</h4>
+                                          <div className="space-y-1 text-sm">
+                                            <p>
+                                              <span className="font-medium">Title:</span> {sharePoint.title}
+                                            </p>
+                                            <p>
+                                              <span className="font-medium">Created by:</span>{" "}
+                                              {sharePoint.createdBy?.username}
+                                            </p>
+                                            <p>
+                                              <span className="font-medium">Deadline:</span>{" "}
+                                              {formatDate(sharePoint.deadline)}
+                                            </p>
+                                            <p>
+                                              <span className="font-medium">Approved by:</span>{" "}
+                                              {sharePoint.approvedBy?.username}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                          <h4 className="text-sm font-medium">Add a signature note (optional)</h4>
+                                          <Textarea
+                                            placeholder="Add any comments or notes about your signature..."
+                                            value={signatureNote}
+                                            onChange={(e) => setSignatureNote(e.target.value)}
+                                            className="min-h-[100px]"
+                                          />
+                                        </div>
+                                        <div className="flex justify-end gap-2">
+                                          <Button
+                                            variant="outline"
+                                            onClick={() => setShowSignDialog(false)}
+                                            disabled={isSubmitting}
+                                          >
+                                            Cancel
+                                          </Button>
+                                          <Button onClick={handleSign} disabled={isSubmitting}>
+                                            {isSubmitting ? "Signing..." : "Confirm Signature"}
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                </div>
+                              ) : sharePoint?.usersToSign?.some(
+                                  (signer) => signer.user._id === activeUser?._id && signer.hasSigned,
+                                ) ? (
+                                <div className="mt-4">
+                                  <Alert className="border-green-200 bg-green-50">
+                                    <CheckCircle2 className="w-4 h-4 text-green-600" />
+                                    <AlertTitle>Document Signed</AlertTitle>
+                                    <AlertDescription>You have already signed this document.</AlertDescription>
+                                  </Alert>
+                                </div>
+                              ) : (
+                                <div className="mt-4">
+                                  <Alert className="border-blue-200 bg-blue-50">
+                                    <Info className="w-4 h-4 text-blue-600" />
+                                    <AlertTitle>Signatures in Progress</AlertTitle>
+                                    <AlertDescription>
+                                      This document is approved and waiting for signatures from assigned users.
+                                    </AlertDescription>
+                                  </Alert>
+                                </div>
+                              )}
+
+                              {/* List of assigned users and their signature status */}
+                              <div className="mt-6">
+                                <h3 className="mb-3 font-medium">Assigned Signers</h3>
+                                <div className="space-y-2">
+                                  {sharePoint.usersToSign?.map((signer) => (
+                                    <div
+                                      key={signer.user._id}
+                                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                                        signer.hasSigned ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <Avatar className="w-8 h-8">
+                                          <AvatarImage src={signer.user.image || "/placeholder.svg"} />
+                                          <AvatarFallback>
+                                            {signer.user.username?.charAt(0).toUpperCase()}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                          <p className="font-medium">{signer.user.username}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {signer.user._id === activeUser?._id ? "(You)" : ""}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <Badge
+                                        className={
+                                          signer.hasSigned
+                                            ? "bg-green-100 text-green-800 border-green-200"
+                                            : "bg-amber-100 text-amber-800 border-amber-200"
+                                        }
+                                      >
+                                        {signer.hasSigned ? (
+                                          <>
+                                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                                            Signed
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Clock className="w-3 h-3 mr-1" />
+                                            Pending
+                                          </>
+                                        )}
+                                      </Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
                           )}
 
-                          {hasManagerApproved && (
-                            <Alert className="border-green-200 bg-green-50">
-                              <CheckCircle2 className="w-4 h-4 text-green-600" />
-                              <AlertTitle>Document Approved</AlertTitle>
-                              <AlertDescription>
-                                This document has been approved by {sharePoint.approvedBy?.username || "a manager"} on{" "}
-                                {formatDate(sharePoint.approvedAt)}.
-                              </AlertDescription>
-                            </Alert>
+                          {/* Show approval buttons for managers when document is pending approval */}
+                          {canApprove && (
+                            <div className="space-y-2">
+                              <h3 className="font-medium">Manager Approval Required</h3>
+                              <p className="text-sm text-muted-foreground">
+                                This document is waiting for manager approval. Once approved, assigned users can sign
+                                it.
+                              </p>
+                              <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
+                                <DialogTrigger asChild>
+                                  <Button className="bg-gradient-to-r from-green-600 to-emerald-600">
+                                    <Shield className="w-4 h-4 mr-2" />
+                                    Review & Approve
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Manager Approval</DialogTitle>
+                                    <DialogDescription>
+                                      You are about to review "{sharePoint.title}". Please approve or reject this
+                                      document.
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="flex justify-end gap-2 mt-4">
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => setShowApproveDialog(false)}
+                                      disabled={isSubmitting}
+                                    >
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      onClick={() => handleApprove(false)}
+                                      disabled={isSubmitting}
+                                    >
+                                      {isSubmitting ? "Processing..." : "Reject"}
+                                    </Button>
+                                    <Button
+                                      variant="default"
+                                      onClick={() => handleApprove(true)}
+                                      disabled={isSubmitting}
+                                      className="bg-green-600 hover:bg-green-700"
+                                    >
+                                      {isSubmitting ? "Processing..." : "Approve"}
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            </div>
                           )}
+
+                          {/* Show message when no actions are available */}
+                          {!hasManagerApproved &&
+                            !canApprove &&
+                            !sharePoint?.usersToSign?.some((signer) => signer.user._id === activeUser?._id) && (
+                              <div className="p-4 text-center border rounded-lg bg-slate-50">
+                                <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                                <p className="text-muted-foreground">No actions available for you at this time.</p>
+                              </div>
+                            )}
                         </div>
                       </CardContent>
                     </Card>

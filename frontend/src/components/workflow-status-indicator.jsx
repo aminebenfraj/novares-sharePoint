@@ -1,126 +1,155 @@
-import { Badge } from "@/components/ui/badge"
+"use client"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle2, Clock, Shield, UserCheck, AlertCircle } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+// Add the missing import for Info icon
+import { FileText, Shield, Users, CheckCircle2, Clock, UserCheck } from "lucide-react"
+import { useAuth } from "../context/AuthContext"
 
 export default function WorkflowStatusIndicator({ sharePoint }) {
-  if (!sharePoint) return null
+  const { user } = useAuth()
 
-  const { status, managerApproved } = sharePoint
-  const allSigned = sharePoint.usersToSign?.every((signer) => signer.hasSigned) || false
-  const signedCount = sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0
-  const totalSigners = sharePoint.usersToSign?.length || 0
-
-  // Calculate the current step (1-4)
-  let currentStep = 1 // Default: Document Created
-  if (managerApproved) {
-    currentStep = 2 // Manager Approved
-    if (signedCount > 0) {
-      currentStep = 3 // Signing In Progress
-      if (allSigned) {
-        currentStep = 4 // All Signed
-      }
-    }
+  const getWorkflowStep = () => {
+    if (!sharePoint.managerApproved) return 1
+    if (sharePoint.managerApproved && !sharePoint.allUsersSigned) return 2
+    if (sharePoint.allUsersSigned) return 3
+    return 1
   }
+
+  const currentStep = getWorkflowStep()
+  const progress = (currentStep / 3) * 100
+
+  const isUserAssigned = sharePoint?.usersToSign?.some((signer) => signer.user._id === user?._id)
+
+  const hasUserSigned = sharePoint?.usersToSign?.some((signer) => signer.user._id === user?._id && signer.hasSigned)
+
+  const canUserSign =
+    sharePoint?.managerApproved &&
+    sharePoint?.usersToSign?.some((signer) => signer.user._id === user?._id && !signer.hasSigned)
+
+  const steps = [
+    {
+      id: 1,
+      title: "Created",
+      description: "Document created and awaiting approval",
+      icon: FileText,
+      status: currentStep >= 1 ? "completed" : "pending",
+    },
+    {
+      id: 2,
+      title: "Approved",
+      description: "Manager approved, ready for signatures",
+      icon: Shield,
+      status: currentStep >= 2 ? "completed" : currentStep === 1 ? "pending" : "upcoming",
+    },
+    {
+      id: 3,
+      title: "Completed",
+      description: "All users have signed",
+      icon: CheckCircle2,
+      status: currentStep >= 3 ? "completed" : "upcoming",
+    },
+  ]
 
   return (
     <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Clock className="w-4 h-4 text-blue-600" />
-          Document Workflow Status
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Users className="w-5 h-5 text-blue-600" />
+          Workflow Status
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="space-y-4">
+        {/* Progress Bar */}
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Progress</span>
+            <span className="font-medium">{Math.round(progress)}%</span>
+          </div>
+          <Progress value={progress} className="h-2" />
+        </div>
+
+        {/* Workflow Steps */}
         <div className="space-y-3">
-          <div className="relative">
-            {/* Progress bar */}
-            <div className="absolute top-3 left-3 w-[calc(100%-24px)] h-1 bg-gray-200 rounded-full">
-              <div className="h-1 bg-blue-600 rounded-full" style={{ width: `${(currentStep - 1) * 33.33}%` }}></div>
-            </div>
+          {steps.map((step, index) => {
+            const Icon = step.icon
+            const isActive = currentStep === step.id
+            const isCompleted = step.status === "completed"
 
-            {/* Steps */}
-            <div className="flex justify-between pt-6">
-              <div className="flex flex-col items-center">
+            return (
+              <div key={step.id} className="flex items-center gap-3">
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    currentStep >= 1 ? "bg-blue-600" : "bg-gray-300"
-                  }`}
+                  className={`
+                  flex items-center justify-center w-8 h-8 rounded-full border-2
+                  ${
+                    isCompleted
+                      ? "bg-green-100 border-green-500 text-green-600"
+                      : isActive
+                        ? "bg-blue-100 border-blue-500 text-blue-600"
+                        : "bg-gray-100 border-gray-300 text-gray-400"
+                  }
+                `}
                 >
-                  <CheckCircle2 className="w-3 h-3 text-white" />
+                  <Icon className="w-4 h-4" />
                 </div>
-                <span className="mt-1 text-xs">Created</span>
-              </div>
-
-              <div className="flex flex-col items-center">
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    currentStep >= 2 ? "bg-blue-600" : "bg-gray-300"
-                  }`}
-                >
-                  <Shield className="w-3 h-3 text-white" />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className={`font-medium ${isActive ? "text-blue-600" : ""}`}>{step.title}</h4>
+                    <Badge variant={isCompleted ? "default" : isActive ? "secondary" : "outline"}>
+                      {isCompleted ? "Done" : isActive ? "Current" : "Pending"}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{step.description}</p>
                 </div>
-                <span className="mt-1 text-xs">Approved</span>
               </div>
+            )
+          })}
+        </div>
 
-              <div className="flex flex-col items-center">
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    currentStep >= 3 ? "bg-blue-600" : "bg-gray-300"
-                  }`}
-                >
-                  <Clock className="w-3 h-3 text-white" />
+        {/* User-specific status */}
+        {isUserAssigned && (
+          <div className="pt-4 border-t">
+            <div className="space-y-2">
+              <h4 className="font-medium">Your Status</h4>
+              {hasUserSigned ? (
+                <div className="flex items-center gap-2 p-3 border border-green-200 rounded-lg bg-green-50">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-700">You have signed this document</span>
                 </div>
-                <span className="mt-1 text-xs">Signing</span>
-              </div>
-
-              <div className="flex flex-col items-center">
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    currentStep >= 4 ? "bg-blue-600" : "bg-gray-300"
-                  }`}
-                >
-                  <UserCheck className="w-3 h-3 text-white" />
+              ) : canUserSign ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 p-3 border border-blue-200 rounded-lg bg-blue-50">
+                    <UserCheck className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-700">Ready for your signature</span>
+                  </div>
                 </div>
-                <span className="mt-1 text-xs">Completed</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between p-2 mt-2 text-sm border rounded-md bg-gray-50">
-            <span>Current Status:</span>
-            <Badge
-              className={
-                status === "completed"
-                  ? "bg-green-100 text-green-800 border-green-200"
-                  : status === "in_progress"
-                    ? "bg-blue-100 text-blue-800 border-blue-200"
-                    : status === "pending"
-                      ? "bg-yellow-100 text-yellow-800 border-yellow-200"
-                      : status === "pending_approval"
-                        ? "bg-orange-100 text-orange-800 border-orange-200"
-                        : "bg-gray-100 text-gray-800 border-gray-200"
-              }
-            >
-              {status === "completed" ? (
-                <CheckCircle2 className="w-3 h-3 mr-1" />
-              ) : status === "in_progress" ? (
-                <Clock className="w-3 h-3 mr-1" />
-              ) : status === "pending" ? (
-                <AlertCircle className="w-3 h-3 mr-1" />
-              ) : status === "pending_approval" ? (
-                <Shield className="w-3 h-3 mr-1" />
               ) : (
-                <AlertCircle className="w-3 h-3 mr-1" />
+                <div className="flex items-center gap-2 p-3 border border-orange-200 rounded-lg bg-orange-50">
+                  <Clock className="w-4 h-4 text-orange-600" />
+                  <span className="text-sm font-medium text-orange-700">Waiting for manager approval</span>
+                </div>
               )}
-              <span className="ml-1">{status?.replace("_", " ").toUpperCase()}</span>
-            </Badge>
+            </div>
           </div>
+        )}
 
-          <div className="flex items-center justify-between p-2 text-sm border rounded-md bg-gray-50">
-            <span>Signatures:</span>
-            <span className="font-medium">
-              {signedCount} of {totalSigners} ({Math.round((signedCount / totalSigners) * 100) || 0}%)
-            </span>
+        {/* Document Statistics */}
+        <div className="pt-4 border-t">
+          <div className="grid grid-cols-2 gap-4 text-center">
+            <div>
+              <p className="text-2xl font-bold text-blue-600">
+                {sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0}
+              </p>
+              <p className="text-xs text-muted-foreground">Signed</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-orange-600">
+                {(sharePoint.usersToSign?.length || 0) -
+                  (sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0)}
+              </p>
+              <p className="text-xs text-muted-foreground">Pending</p>
+            </div>
           </div>
         </div>
       </CardContent>
