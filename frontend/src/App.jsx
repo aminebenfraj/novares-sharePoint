@@ -13,9 +13,9 @@ import EditUserRoles from "./pages/roleMangement/EditUserRoles"
 import CreateUser from "./pages/roleMangement/CreateUser"
 
 // SharePoint Pages
-import SharepointShow from "./pages/sharepoint-show"
 import SharepointForm from "./pages/sharepoint-form"
 import SharepointDetail from "./pages/sharepoint-detail-enhanced"
+import Sharepointshow from "./pages/sharepoint-show-enhanced"
 
 // User Pages
 import ProfilePage from "./pages/user/profile-page"
@@ -52,12 +52,12 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 
-        {/* Home route - redirect to sharepoint list */}
+        {/* Home route - redirect to sharepoint form */}
         <Route
           path="/"
           element={
             <ProtectedRoute requiredRoles={productionRoles}>
-              <SharepointShow />
+              <Sharepointshow />
             </ProtectedRoute>
           }
         />
@@ -67,7 +67,7 @@ function App() {
           path="/sharepoint"
           element={
             <ProtectedRoute requiredRoles={productionRoles}>
-              <SharepointShow />
+              <Sharepointshow />
             </ProtectedRoute>
           }
         />
