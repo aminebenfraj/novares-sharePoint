@@ -6,15 +6,6 @@ import {
   Settings,
   User,
   LogOut,
-  ChevronDown,
-  PlusCircle,
-  ShoppingCart,
-  Package,
-  Wrench,
-  Atom,
-  ClipboardCheck,
-  BarChart3,
-  Home,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -25,7 +16,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
