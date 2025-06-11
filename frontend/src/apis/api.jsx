@@ -1,35 +1,60 @@
-import axios from "axios";
+// general api config
+import axios from 'axios';
 
-export const apiRequest = async (
-  method,
-  url,
-  data = null,
-  isFormData = false
-) => {
-  try {
-    const token = localStorage.getItem("accessToken");
-    if (!token) {
-      throw new Error("No access token found");
+const axiosInstance = axios.create({
+  baseURL: `https://novares-sharepoint-backend.onrender.com/`,
+  timeout: 5000,
+});
+
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const config = {
-      method,
-      url: `https://machine-alert-frontend.onrender.com/${url}`,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      },
-    };
-
-    // Only attach data if method allows a body
-    if (data && !["GET", "DELETE"].includes(method.toUpperCase())) {
-      config.data = data;
+    if (!(config.data instanceof FormData)) {
+      config.headers['Content-Type'] = 'application/json';
     }
 
-    const response = await axios(config);
-    return response.data;
-  } catch (error) {
-    console.error("API Request Error:", error);
-    throw error;
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+
+
+// Enhanced API request function with retry mechanism
+export const apiRequest = async (method, url, data = null, isFormData = false, queryParams = {}) => {
+
+  // Build query string for GET requests
+  const queryString = Object.keys(queryParams).length > 0 ? `?${new URLSearchParams(queryParams).toString()}` : ""
+
+  // Append query string to URL for GET requests
+  const requestUrl = method.toUpperCase() === "GET" && queryString ? `${url}${queryString}` : url
+
+ 
+    try {
+      // Get token from localStorage
+      const token = localStorage.getItem("accessToken")
+
+      const config = {
+        method,
+        url: requestUrl,
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        },
+        ...(method.toUpperCase() !== "GET" && data ? { data } : {}),
+        ...(method.toUpperCase() === "GET" && Object.keys(queryParams).length > 0 ? { params: queryParams } : {}),
+      }
+
+      const response = await axiosInstance(config)
+      return response.data
+    } catch (error) {
+      console.error("API request error:", error)
+    throw error
+    }
   }
-};
+
+export default axiosInstance
