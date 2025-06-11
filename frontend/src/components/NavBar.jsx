@@ -44,35 +44,7 @@ const moduleGroups = [
   },
 ]
 
-// Define common actions for different modules
-const moduleActions = {
-  materials: [
-    { label: "Create Material", path: "/materials/create", icon: PlusCircle },
-    { label: "View Materials", path: "/materials", icon: Package },
-  ],
-  machines: [
-    { label: "Create Machine", path: "/machines/create", icon: PlusCircle },
-    { label: "View Machines", path: "/machines", icon: Wrench },
-    { label: "Machine Dashboard", path: "/machine-dashboard", icon: BarChart3 },
-  ],
-  masspd: [
-    { label: "Create Production", path: "/masspd/create", icon: PlusCircle },
-    { label: "View Productions", path: "/masspd", icon: Atom },
-  ],
-  pedido: [
-    { label: "Create Order", path: "/pedido/create", icon: PlusCircle },
-    { label: "View Orders", path: "/pedido", icon: ShoppingCart },
-  ],
-  readiness: [
-    { label: "Create Readiness", path: "/readiness/create", icon: PlusCircle },
-    { label: "View Readiness", path: "/readiness", icon: ClipboardCheck },
-  ],
-  default: [
-    { label: "Dashboard", path: "/", icon: Home },
-    { label: "Materials", path: "/materials", icon: Package },
-    { label: "Orders", path: "/pedido", icon: ShoppingCart },
-  ],
-}
+
 
 export const Navbar = ({ toggleSidebar, isSidebarOpen }) => {
   const location = useLocation()
@@ -107,48 +79,8 @@ export const Navbar = ({ toggleSidebar, isSidebarOpen }) => {
             {/* Create new dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1 bg-white border-slate-200 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
-                >
-                  <PlusCircle className="w-4 h-4 mr-1" />
-                  <span className="hidden sm:inline">Create</span>
-                  <ChevronDown className="w-3 h-3 ml-1" />
-                </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Create New</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => navigate("/materials/create")}>
-                    <Package className="w-4 h-4 mr-2" />
-                    <span>Material</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/machines/create")}>
-                    <Wrench className="w-4 h-4 mr-2" />
-                    <span>Machine</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/pedido/create")}>
-                    <ShoppingCart className="w-4 h-4 mr-2" />
-                    <span>Order</span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-
-                <DropdownMenuSeparator />
-
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => navigate("/masspd/create")}>
-                    <Atom className="w-4 h-4 mr-2" />
-                    <span>Production</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/readiness/create")}>
-                    <ClipboardCheck className="w-4 h-4 mr-2" />
-                    <span>Readiness</span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-
                 {user?.role === "admin" && (
                   <>
                     <DropdownMenuSeparator />

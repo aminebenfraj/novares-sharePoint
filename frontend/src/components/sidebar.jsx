@@ -92,12 +92,6 @@ const navigationItems = [
         icon: User,
         path: "/admin",
       },
-      {
-        id: "createUser",
-        label: "Create User",
-        icon: User,
-        path: "/admin/create-user",
-      },
     ],
   },
 ]
