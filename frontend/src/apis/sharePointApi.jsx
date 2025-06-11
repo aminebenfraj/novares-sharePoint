@@ -21,7 +21,7 @@ export const createSharePoint = (data) => {
   })
 }
 
-// Get all SharePoint documents with filtering
+// Get all SharePoint documents with enhanced filtering and pagination
 export const getAllSharePoints = (filters = {}) => {
   const queryParams = new URLSearchParams()
 
@@ -30,6 +30,9 @@ export const getAllSharePoints = (filters = {}) => {
   if (filters.assignedTo) queryParams.append("assignedTo", filters.assignedTo)
   if (filters.page) queryParams.append("page", filters.page)
   if (filters.limit) queryParams.append("limit", filters.limit)
+  if (filters.sortBy) queryParams.append("sortBy", filters.sortBy)
+  if (filters.sortOrder) queryParams.append("sortOrder", filters.sortOrder)
+  if (filters.search) queryParams.append("search", filters.search)
 
   const queryString = queryParams.toString()
   const url = queryString ? `${BASE_URL}?${queryString}` : BASE_URL
@@ -62,13 +65,16 @@ export const approveSharePoint = (id, approved = true) => {
   return apiRequest("POST", `${BASE_URL}/${id}/approve`, { approved })
 }
 
-// Get SharePoints assigned to current user
+// Get SharePoints assigned to current user with enhanced filtering
 export const getMyAssignedSharePoints = (filters = {}) => {
   const queryParams = new URLSearchParams()
 
   if (filters.status) queryParams.append("status", filters.status)
   if (filters.page) queryParams.append("page", filters.page)
   if (filters.limit) queryParams.append("limit", filters.limit)
+  if (filters.sortBy) queryParams.append("sortBy", filters.sortBy)
+  if (filters.sortOrder) queryParams.append("sortOrder", filters.sortOrder)
+  if (filters.search) queryParams.append("search", filters.search)
 
   const queryString = queryParams.toString()
   const url = queryString ? `${BASE_URL}/my-assigned?${queryString}` : `${BASE_URL}/my-assigned`
@@ -76,13 +82,16 @@ export const getMyAssignedSharePoints = (filters = {}) => {
   return apiRequest("GET", url)
 }
 
-// Get SharePoints created by current user
+// Get SharePoints created by current user with enhanced filtering
 export const getMyCreatedSharePoints = (filters = {}) => {
   const queryParams = new URLSearchParams()
 
   if (filters.status) queryParams.append("status", filters.status)
   if (filters.page) queryParams.append("page", filters.page)
   if (filters.limit) queryParams.append("limit", filters.limit)
+  if (filters.sortBy) queryParams.append("sortBy", filters.sortBy)
+  if (filters.sortOrder) queryParams.append("sortOrder", filters.sortOrder)
+  if (filters.search) queryParams.append("search", filters.search)
 
   const queryString = queryParams.toString()
   const url = queryString ? `${BASE_URL}/my-created?${queryString}` : `${BASE_URL}/my-created`
@@ -104,4 +113,31 @@ export const canUserSign = async (sharePointId, userId) => {
     console.error("Error checking sign permission:", error)
     throw error
   }
+}
+
+// Get SharePoint statistics
+export const getSharePointStats = () => {
+  return apiRequest("GET", `${BASE_URL}/stats`)
+}
+
+// Bulk operations
+export const bulkUpdateSharePoints = (ids, updateData) => {
+  return apiRequest("PUT", `${BASE_URL}/bulk-update`, { ids, updateData })
+}
+
+export const bulkDeleteSharePoints = (ids) => {
+  return apiRequest("DELETE", `${BASE_URL}/bulk-delete`, { ids })
+}
+
+// Export SharePoints to CSV
+export const exportSharePoints = (filters = {}) => {
+  const queryParams = new URLSearchParams()
+  Object.keys(filters).forEach((key) => {
+    if (filters[key]) queryParams.append(key, filters[key])
+  })
+
+  const queryString = queryParams.toString()
+  const url = queryString ? `${BASE_URL}/export?${queryString}` : `${BASE_URL}/export`
+
+  return apiRequest("GET", url)
 }

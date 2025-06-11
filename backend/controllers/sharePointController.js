@@ -1,5 +1,10 @@
 const SharePoint = require("../models/SharePoint")
 const User = require("../models/UserModel")
+const {
+  sendBulkSharePointAssignmentEmails,
+  sendSharePointApprovalEmail,
+  sendSharePointCompletionEmail,
+} = require("../utils/emailService")
 
 // Helper function to calculate completion percentage and status
 const calculateCompletionData = (sharePoint) => {
@@ -22,7 +27,7 @@ const calculateCompletionData = (sharePoint) => {
   return { completionPercentage, allUsersSigned, status }
 }
 
-// Create a new SharePoint
+// Create a new SharePoint - FIXED with proper email notifications
 exports.createSharePoint = async (req, res) => {
   try {
     const { title, link, comment, deadline, usersToSign } = req.body
@@ -42,8 +47,8 @@ exports.createSharePoint = async (req, res) => {
       return res.status(400).json({ error: "At least one signer must be selected" })
     }
 
-    // Verify all selected users exist
-    const selectedUsers = await User.find({ _id: { $in: usersToSign } })
+    // Verify all selected users exist and get their full details
+    const selectedUsers = await User.find({ _id: { $in: usersToSign } }).select("_id username email roles")
     if (selectedUsers.length !== usersToSign.length) {
       return res.status(400).json({ error: "One or more selected users do not exist" })
     }
@@ -72,6 +77,40 @@ exports.createSharePoint = async (req, res) => {
       { path: "usersToSign.user", select: "username email roles" },
     ])
 
+    // ✅ FIXED: Send email notifications to assigned users
+    try {
+      console.log(`📧 Preparing to send emails to ${selectedUsers.length} users...`)
+
+      // Prepare email data for each assigned user
+      const emailList = selectedUsers.map((user) => ({
+        to: user.email,
+        username: user.username,
+        documentTitle: title,
+        documentLink: link,
+        deadline: deadline,
+        createdBy: req.user.username,
+        comment: comment || "",
+        documentId: sharePoint._id.toString(),
+      }))
+
+      // Send bulk emails
+      const emailResults = await sendBulkSharePointAssignmentEmails(emailList)
+
+      console.log(`📧 Email notification results:`, {
+        total: emailResults.total,
+        successful: emailResults.successful,
+        failed: emailResults.failed,
+      })
+
+      // Log any failed emails
+      if (emailResults.failed > 0) {
+        console.warn(`⚠️ ${emailResults.failed} emails failed to send`)
+      }
+    } catch (emailError) {
+      console.error("❌ Email notification failed:", emailError)
+      // Continue with response even if email fails - don't break document creation
+    }
+
     // Calculate completion data
     const completionData = calculateCompletionData(sharePoint)
     const responseData = {
@@ -80,8 +119,10 @@ exports.createSharePoint = async (req, res) => {
     }
 
     res.status(201).json({
-      message: "SharePoint created successfully. Waiting for manager approval before users can sign.",
+      message:
+        "SharePoint created successfully. Email notifications sent to assigned users. Waiting for manager approval before users can sign.",
       sharePoint: responseData,
+      emailNotificationsSent: true,
     })
   } catch (error) {
     console.error("Error creating SharePoint:", error)
@@ -89,28 +130,48 @@ exports.createSharePoint = async (req, res) => {
   }
 }
 
-// Get all SharePoints with filtering
+// Get all SharePoints with enhanced pagination
 exports.getAllSharePoints = async (req, res) => {
   try {
-    const { status, createdBy, assignedTo, page = 1, limit = 10 } = req.query
+    const {
+      status,
+      createdBy,
+      assignedTo,
+      page = 1,
+      limit = 10,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      search = "",
+    } = req.query
+
     const filter = {}
+    const sort = {}
 
     // Apply filters
-    if (status) filter.status = status
+    if (status && status !== "all") filter.status = status
     if (createdBy) filter.createdBy = createdBy
     if (assignedTo) filter["usersToSign.user"] = assignedTo
 
-    // For non-admin users, only show SharePoints they created or are assigned to
-    if (!req.user.roles.includes("Admin")) {
-      filter.$or = [{ createdBy: req.user._id }, { "usersToSign.user": req.user._id }]
+    // Add search functionality
+    if (search) {
+      filter.$or = [{ title: { $regex: search, $options: "i" } }, { comment: { $regex: search, $options: "i" } }]
     }
 
-    const skip = (page - 1) * limit
+    // For non-admin users, only show SharePoints they created or are assigned to
+    if (!req.user.roles.includes("Admin")) {
+      const userFilter = { $or: [{ createdBy: req.user._id }, { "usersToSign.user": req.user._id }] }
+      filter.$and = filter.$and ? [...filter.$and, userFilter] : [userFilter]
+    }
+
+    // Set up sorting
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1
+
+    const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit)
     const sharePoints = await SharePoint.find(filter)
       .populate("createdBy", "username email roles")
       .populate("usersToSign.user", "username email roles")
       .populate("approvedBy", "username email")
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip(skip)
       .limit(Number.parseInt(limit))
       .lean()
@@ -127,9 +188,19 @@ exports.getAllSharePoints = async (req, res) => {
       sharePoints: sharePointsWithCompletion,
       pagination: {
         currentPage: Number.parseInt(page),
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / Number.parseInt(limit)),
         totalItems: total,
         itemsPerPage: Number.parseInt(limit),
+        hasNextPage: Number.parseInt(page) < Math.ceil(total / Number.parseInt(limit)),
+        hasPrevPage: Number.parseInt(page) > 1,
+      },
+      filters: {
+        status,
+        createdBy,
+        assignedTo,
+        search,
+        sortBy,
+        sortOrder,
       },
     })
   } catch (error) {
@@ -179,11 +250,13 @@ exports.getSharePointById = async (req, res) => {
   }
 }
 
-// Sign SharePoint - UPDATED to properly update status
+// Sign SharePoint - UPDATED with completion email notifications
 exports.signSharePoint = async (req, res) => {
   try {
     const { signatureNote } = req.body
     const sharePoint = await SharePoint.findById(req.params.id)
+      .populate("createdBy", "username email roles")
+      .populate("usersToSign.user", "username email roles")
 
     if (!sharePoint) {
       return res.status(404).json({ error: "SharePoint not found" })
@@ -198,7 +271,9 @@ exports.signSharePoint = async (req, res) => {
     }
 
     // Check if user is in the signers list
-    const signerIndex = sharePoint.usersToSign.findIndex((signer) => signer.user.toString() === req.user._id.toString())
+    const signerIndex = sharePoint.usersToSign.findIndex(
+      (signer) => signer.user._id.toString() === req.user._id.toString(),
+    )
 
     if (signerIndex === -1) {
       return res.status(403).json({ error: "You are not authorized to sign this SharePoint" })
@@ -228,6 +303,24 @@ exports.signSharePoint = async (req, res) => {
     })
 
     await sharePoint.save()
+
+    // ✅ Send completion email if document is now completed
+    if (completionData.status === "completed") {
+      try {
+        // Send completion email to document creator
+        await sendSharePointCompletionEmail({
+          to: sharePoint.createdBy.email,
+          username: sharePoint.createdBy.username,
+          documentTitle: sharePoint.title,
+          documentId: sharePoint._id.toString(),
+        })
+
+        console.log(`📧 Completion notification sent to document creator: ${sharePoint.createdBy.email}`)
+      } catch (emailError) {
+        console.error("❌ Failed to send completion email:", emailError)
+      }
+    }
+
     await sharePoint.populate([
       { path: "createdBy", select: "username email roles" },
       { path: "usersToSign.user", select: "username email roles" },
@@ -249,21 +342,30 @@ exports.signSharePoint = async (req, res) => {
   }
 }
 
-// Get SharePoints assigned to current user
+// Get SharePoints assigned to current user with enhanced pagination
 exports.getMyAssignedSharePoints = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query
+    const { status, page = 1, limit = 10, sortBy = "createdAt", sortOrder = "desc", search = "" } = req.query
+
     const filter = {
       "usersToSign.user": req.user._id,
     }
 
-    if (status) filter.status = status
+    if (status && status !== "all") filter.status = status
 
-    const skip = (page - 1) * limit
+    // Add search functionality
+    if (search) {
+      filter.$or = [{ title: { $regex: search, $options: "i" } }, { comment: { $regex: search, $options: "i" } }]
+    }
+
+    const sort = {}
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1
+
+    const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit)
     const sharePoints = await SharePoint.find(filter)
       .populate("createdBy", "username email roles")
       .populate("usersToSign.user", "username email roles")
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip(skip)
       .limit(Number.parseInt(limit))
       .lean()
@@ -280,9 +382,11 @@ exports.getMyAssignedSharePoints = async (req, res) => {
       sharePoints: sharePointsWithCompletion,
       pagination: {
         currentPage: Number.parseInt(page),
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / Number.parseInt(limit)),
         totalItems: total,
         itemsPerPage: Number.parseInt(limit),
+        hasNextPage: Number.parseInt(page) < Math.ceil(total / Number.parseInt(limit)),
+        hasPrevPage: Number.parseInt(page) > 1,
       },
     })
   } catch (error) {
@@ -291,21 +395,30 @@ exports.getMyAssignedSharePoints = async (req, res) => {
   }
 }
 
-// Get SharePoints created by current user
+// Get SharePoints created by current user with enhanced pagination
 exports.getMyCreatedSharePoints = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query
+    const { status, page = 1, limit = 10, sortBy = "createdAt", sortOrder = "desc", search = "" } = req.query
+
     const filter = {
       createdBy: req.user._id,
     }
 
-    if (status) filter.status = status
+    if (status && status !== "all") filter.status = status
 
-    const skip = (page - 1) * limit
+    // Add search functionality
+    if (search) {
+      filter.$or = [{ title: { $regex: search, $options: "i" } }, { comment: { $regex: search, $options: "i" } }]
+    }
+
+    const sort = {}
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1
+
+    const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit)
     const sharePoints = await SharePoint.find(filter)
       .populate("createdBy", "username email roles")
       .populate("usersToSign.user", "username email roles")
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip(skip)
       .limit(Number.parseInt(limit))
       .lean()
@@ -322,9 +435,11 @@ exports.getMyCreatedSharePoints = async (req, res) => {
       sharePoints: sharePointsWithCompletion,
       pagination: {
         currentPage: Number.parseInt(page),
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / Number.parseInt(limit)),
         totalItems: total,
         itemsPerPage: Number.parseInt(limit),
+        hasNextPage: Number.parseInt(page) < Math.ceil(total / Number.parseInt(limit)),
+        hasPrevPage: Number.parseInt(page) > 1,
       },
     })
   } catch (error) {
@@ -436,11 +551,13 @@ exports.deleteSharePoint = async (req, res) => {
   }
 }
 
-// Approve SharePoint (Manager only) - UPDATED to enable signing after approval
+// Approve SharePoint (Manager only) - ENHANCED with email notifications
 exports.approveSharePoint = async (req, res) => {
   try {
     const { approved } = req.body
     const sharePoint = await SharePoint.findById(req.params.id)
+      .populate("createdBy", "username email roles")
+      .populate("usersToSign.user", "username email roles")
 
     if (!sharePoint) {
       return res.status(404).json({ error: "SharePoint not found" })
@@ -476,6 +593,30 @@ exports.approveSharePoint = async (req, res) => {
     })
 
     await sharePoint.save()
+
+    // ✅ Send approval notification emails if approved
+    if (approved) {
+      try {
+        console.log(`📧 Sending approval notifications to ${sharePoint.usersToSign.length} users...`)
+
+        // Send approval emails to all assigned users
+        const approvalEmailPromises = sharePoint.usersToSign.map((signer) =>
+          sendSharePointApprovalEmail({
+            to: signer.user.email,
+            username: signer.user.username,
+            documentTitle: sharePoint.title,
+            documentId: sharePoint._id.toString(),
+            approvedBy: req.user.username,
+          }),
+        )
+
+        await Promise.allSettled(approvalEmailPromises)
+        console.log(`📧 Approval notifications sent successfully`)
+      } catch (emailError) {
+        console.error("❌ Failed to send approval notifications:", emailError)
+      }
+    }
+
     await sharePoint.populate([
       { path: "createdBy", select: "username email roles" },
       { path: "usersToSign.user", select: "username email roles" },
@@ -490,7 +631,7 @@ exports.approveSharePoint = async (req, res) => {
     }
 
     res.json({
-      message: `SharePoint ${approved ? "approved" : "rejected"} successfully`,
+      message: `SharePoint ${approved ? "approved" : "rejected"} successfully${approved ? ". Approval notifications sent to assigned users." : ""}`,
       sharePoint: responseData,
     })
   } catch (error) {
