@@ -19,23 +19,33 @@ const server = http.createServer(app);
 
 // Middleware
 app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true,
-}));
-app.use(express.json()); // Removed duplicate app.use(express.json())
+  origin: [
+    'https://machine-alert-frontend.onrender.com',
+    'http://localhost:3000', // For local development
+    'http://localhost:5173'  // For Vite default port if you're using it
+  ],
+  credentials: true, // This is crucial for allowing cookies/credentials
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}))
+// Removed duplicate app.use(express.json())
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => {
-  console.log("MongoDB connected");
-})
-.catch((error) => {
-  console.error("MongoDB connection failed:", error);
-});
 
+app.use(express.json())
+
+// MongoDB Connection
+mongoose
+  .connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => {
+    console.log("MongoDB connected")
+  })
+  .catch((error) => {
+    console.error("MongoDB connection failed:", error)
+  })
 // Handle Mongoose Deprecation Warning
 mongoose.set("strictQuery", false);
 
