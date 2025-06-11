@@ -14,7 +14,7 @@ export const apiRequest = async (
 
     const config = {
       method,
-      url: `http://localhost:5000/${url}`,
+      url: `https://machine-alert-frontend.onrender.com/${url}`,
       headers: {
         Authorization: `Bearer ${token}`,
         ...(isFormData ? {} : { "Content-Type": "application/json" }),
