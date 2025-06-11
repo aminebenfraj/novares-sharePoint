@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Separator } from "@/components/ui/separator"
 import {
   Calendar,
   Users,
@@ -30,6 +31,9 @@ import {
   Check,
   ChevronsUpDown,
   Loader2,
+  Shield,
+  Mail,
+  UserPlus,
 } from "lucide-react"
 import { createSharePoint } from "../apis/sharePointApi"
 import { getAllUsers } from "../apis/admin"
@@ -74,7 +78,7 @@ const cardVariants = {
   },
 }
 
-export default function SharePointCreateModern() {
+export default function SharePointCreateEnhanced() {
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -88,14 +92,21 @@ export default function SharePointCreateModern() {
 
   const [errors, setErrors] = useState({})
   const [selectedUsers, setSelectedUsers] = useState([])
+  const [selectedManagers, setSelectedManagers] = useState([])
+  const [externalEmails, setExternalEmails] = useState([])
+  const [newExternalEmail, setNewExternalEmail] = useState("")
   const [allUsers, setAllUsers] = useState([])
+  const [managers, setManagers] = useState([])
   const [filteredUsers, setFilteredUsers] = useState([])
+  const [filteredManagers, setFilteredManagers] = useState([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [managerSearchTerm, setManagerSearchTerm] = useState("")
   const [isLoadingUsers, setIsLoadingUsers] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [apiError, setApiError] = useState("")
   const [showUserSelector, setShowUserSelector] = useState(false)
+  const [showManagerSelector, setShowManagerSelector] = useState(false)
   const [formProgress, setFormProgress] = useState(0)
 
   const steps = [
@@ -115,13 +126,27 @@ export default function SharePointCreateModern() {
     },
     {
       id: 2,
+      title: "Select Approvers",
+      description: "Choose managers who can approve",
+      icon: Shield,
+      fields: ["managers"],
+    },
+    {
+      id: 3,
       title: "Select Signers",
       description: "Choose who needs to sign",
       icon: Users,
       fields: ["usersToSign"],
     },
     {
-      id: 3,
+      id: 4,
+      title: "External Users",
+      description: "Add external users by email",
+      icon: Mail,
+      fields: ["externalEmails"],
+    },
+    {
+      id: 5,
       title: "Review & Submit",
       description: "Confirm all details",
       icon: Target,
@@ -131,17 +156,19 @@ export default function SharePointCreateModern() {
 
   // Calculate form completion progress
   useEffect(() => {
-    const totalFields = 4 // title, link, deadline, usersToSign
+    const totalFields = 6 // title, link, deadline, managers, usersToSign, externalEmails
     let completedFields = 0
 
     if (formData.title.trim()) completedFields++
     if (formData.link.trim()) completedFields++
     if (formData.deadline) completedFields++
-    if (selectedUsers.length > 0) completedFields++
+    if (selectedManagers.length > 0) completedFields++
+    if (selectedUsers.length > 0 || externalEmails.length > 0) completedFields++
+    if (externalEmails.length > 0 || selectedUsers.length > 0) completedFields++
 
     const progress = (completedFields / totalFields) * 100
     setFormProgress(progress)
-  }, [formData, selectedUsers])
+  }, [formData, selectedUsers, selectedManagers, externalEmails])
 
   useEffect(() => {
     loadAllUsers()
@@ -163,6 +190,22 @@ export default function SharePointCreateModern() {
     setFilteredUsers(filtered)
   }, [searchTerm, allUsers])
 
+  useEffect(() => {
+    if (!managerSearchTerm.trim()) {
+      setFilteredManagers(managers)
+      return
+    }
+
+    const searchTermLower = managerSearchTerm.toLowerCase()
+    const filtered = managers.filter(
+      (manager) =>
+        manager.username?.toLowerCase().includes(searchTermLower) ||
+        manager.email?.toLowerCase().includes(searchTermLower) ||
+        manager.roles?.some((role) => role.toLowerCase().includes(searchTermLower)),
+    )
+    setFilteredManagers(filtered)
+  }, [managerSearchTerm, managers])
+
   const loadAllUsers = async () => {
     try {
       setIsLoadingUsers(true)
@@ -171,8 +214,24 @@ export default function SharePointCreateModern() {
       const response = await getAllUsers(1, 1000)
       const users = response.users || []
 
+      // Filter managers (users with manager roles) - Fixed logic
+      const managerRoles = ["Admin", "Manager", "Project Manager", "Business Manager", "Department Manager"]
+      const managerUsers = users.filter((user) => {
+        // Check if user has ANY manager role
+        return user.roles && user.roles.some((role) => managerRoles.includes(role))
+      })
+
+      console.log("All users:", users.length)
+      console.log("Manager users found:", managerUsers.length)
+      console.log(
+        "Manager users:",
+        managerUsers.map((u) => ({ username: u.username, roles: u.roles })),
+      )
+
       setAllUsers(users)
+      setManagers(managerUsers)
       setFilteredUsers(users)
+      setFilteredManagers(managerUsers)
     } catch (error) {
       console.error("Error loading users:", error)
       setApiError("Failed to load users. Please try again.")
@@ -213,9 +272,15 @@ export default function SharePointCreateModern() {
       }
     }
 
+    if (step.fields.includes("managers")) {
+      if (selectedManagers.length === 0) {
+        newErrors.managers = "At least one manager must be selected for approval"
+      }
+    }
+
     if (step.fields.includes("usersToSign")) {
-      if (selectedUsers.length === 0) {
-        newErrors.usersToSign = "At least one signer must be selected"
+      if (selectedUsers.length === 0 && externalEmails.length === 0) {
+        newErrors.usersToSign = "At least one signer must be selected or external email added"
       }
     }
 
@@ -242,6 +307,54 @@ export default function SharePointCreateModern() {
     }
   }
 
+  const handleManagerToggle = (manager) => {
+    const isSelected = selectedManagers.find((m) => m._id === manager._id)
+    if (isSelected) {
+      setSelectedManagers((prev) => prev.filter((m) => m._id !== manager._id))
+    } else {
+      setSelectedManagers((prev) => [...prev, manager])
+    }
+    if (errors.managers) {
+      setErrors((prev) => ({ ...prev, managers: "" }))
+    }
+  }
+
+  const handleAddExternalEmail = () => {
+    const email = newExternalEmail.trim()
+    if (!email) return
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setErrors((prev) => ({ ...prev, externalEmail: "Please enter a valid email address" }))
+      return
+    }
+
+    // Check if email already exists
+    if (externalEmails.includes(email)) {
+      setErrors((prev) => ({ ...prev, externalEmail: "This email is already added" }))
+      return
+    }
+
+    // Check if email belongs to an existing user
+    const existingUser = allUsers.find((user) => user.email.toLowerCase() === email.toLowerCase())
+    if (existingUser) {
+      setErrors((prev) => ({
+        ...prev,
+        externalEmail: "This email belongs to an existing user. Please select them from the users list instead.",
+      }))
+      return
+    }
+
+    setExternalEmails((prev) => [...prev, email])
+    setNewExternalEmail("")
+    setErrors((prev) => ({ ...prev, externalEmail: "" }))
+  }
+
+  const handleRemoveExternalEmail = (email) => {
+    setExternalEmails((prev) => prev.filter((e) => e !== email))
+  }
+
   const nextStep = () => {
     if (validateStep(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1))
@@ -253,9 +366,12 @@ export default function SharePointCreateModern() {
   }
 
   const handleSubmit = async () => {
-    if (!validateStep(2)) {
-      // Validate all required fields
-      return
+    // Validate all steps first
+    for (let i = 0; i <= 4; i++) {
+      if (!validateStep(i)) {
+        setCurrentStep(i)
+        return
+      }
     }
 
     setIsSubmitting(true)
@@ -268,14 +384,19 @@ export default function SharePointCreateModern() {
         comment: formData.comment.trim(),
         deadline: formData.deadline,
         usersToSign: selectedUsers.map((user) => user._id),
+        managersToApprove: selectedManagers.map((manager) => manager._id),
+        externalEmails: externalEmails,
       }
+
+      console.log("Submitting data:", submitData)
+      console.log("Selected managers:", selectedManagers)
 
       await createSharePoint(submitData)
 
       setSubmitSuccess(true)
       toast({
         title: "🎉 Success!",
-        description: "SharePoint document created successfully!",
+        description: "SharePoint document created successfully! Notifications sent to all assigned users.",
       })
 
       setTimeout(() => {
@@ -289,7 +410,7 @@ export default function SharePointCreateModern() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create SharePoint document.",
+        description: error.response?.data?.error || "Failed to create SharePoint document.",
       })
     } finally {
       setIsSubmitting(false)
@@ -301,7 +422,7 @@ export default function SharePointCreateModern() {
   }
 
   const StepIndicator = () => (
-    <div className="flex items-center justify-between mb-8">
+    <div className="flex items-center justify-between mb-8 overflow-x-auto">
       {steps.map((step, index) => {
         const Icon = step.icon
         const isActive = index === currentStep
@@ -309,7 +430,7 @@ export default function SharePointCreateModern() {
         const isAccessible = index <= currentStep
 
         return (
-          <div key={step.id} className="flex items-center">
+          <div key={step.id} className="flex items-center flex-shrink-0">
             <div className="flex flex-col items-center">
               <button
                 onClick={() => isAccessible && setCurrentStep(index)}
@@ -359,7 +480,7 @@ export default function SharePointCreateModern() {
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
         <Command>
-          <CommandInput placeholder="Search users..." />
+          <CommandInput placeholder="Search users..." value={searchTerm} onValueChange={setSearchTerm} />
           <CommandEmpty>No users found.</CommandEmpty>
           <CommandList>
             <CommandGroup>
@@ -386,6 +507,75 @@ export default function SharePointCreateModern() {
                         {user.roles && user.roles.length > 0 && (
                           <div className="flex gap-1 mt-1">
                             {user.roles.slice(0, 2).map((role) => (
+                              <Badge key={role} variant="secondary" className="text-xs">
+                                {role}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </CommandItem>
+                  )
+                })}
+              </ScrollArea>
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+
+  const ManagerSelector = () => (
+    <Popover open={showManagerSelector} onOpenChange={setShowManagerSelector}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={showManagerSelector}
+          className="justify-between w-full"
+        >
+          {selectedManagers.length > 0
+            ? `${selectedManagers.length} manager${selectedManagers.length > 1 ? "s" : ""} selected`
+            : "Select managers to approve..."}
+          <ChevronsUpDown className="w-4 h-4 ml-2 opacity-50 shrink-0" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-full p-0" align="start">
+        <Command>
+          <CommandInput
+            placeholder="Search managers..."
+            value={managerSearchTerm}
+            onValueChange={setManagerSearchTerm}
+          />
+          <CommandEmpty>No managers found.</CommandEmpty>
+          <CommandList>
+            <CommandGroup>
+              <ScrollArea className="h-64">
+                {filteredManagers.map((manager) => {
+                  const isSelected = selectedManagers.find((m) => m._id === manager._id)
+                  return (
+                    <CommandItem
+                      key={manager._id}
+                      onSelect={() => handleManagerToggle(manager)}
+                      className="flex items-center gap-2 p-2"
+                    >
+                      <div
+                        className={cn(
+                          "flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                          isSelected ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible",
+                        )}
+                      >
+                        <Check className="w-3 h-3" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-3 h-3 text-blue-600" />
+                          <p className="text-sm font-medium">{manager.username}</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{manager.email}</p>
+                        {manager.roles && manager.roles.length > 0 && (
+                          <div className="flex gap-1 mt-1">
+                            {manager.roles.slice(0, 2).map((role) => (
                               <Badge key={role} variant="secondary" className="text-xs">
                                 {role}
                               </Badge>
@@ -628,10 +818,109 @@ export default function SharePointCreateModern() {
                       </motion.div>
                     )}
 
-                    {/* Step 2: Select Signers */}
+                    {/* Step 2: Select Approvers */}
                     {currentStep === 2 && (
                       <motion.div
                         key="step-2"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        <div className="space-y-2">
+                          <h2 className="text-2xl font-semibold">Select Approvers</h2>
+                          <p className="text-muted-foreground">
+                            Choose managers who must approve this document before users can sign it. Only approved
+                            documents can be signed by assigned users.
+                          </p>
+                          {/* Debug info */}
+                          <div className="p-2 text-xs bg-gray-100 rounded">
+                            <p>Debug: {managers.length} managers available</p>
+                            <p>Debug: {selectedManagers.length} managers selected</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-6">
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Managers to Approve *</Label>
+                            <ManagerSelector />
+                            {errors.managers && (
+                              <p className="flex items-center gap-1 text-sm text-destructive">
+                                <AlertCircle className="w-3 h-3" />
+                                {errors.managers}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              Only users with manager roles (Admin, Manager, Project Manager, Business Manager,
+                              Department Manager) are shown here
+                            </p>
+                          </div>
+
+                          {/* Selected Managers */}
+                          {selectedManagers.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-sm font-medium">
+                                  Selected Approvers ({selectedManagers.length})
+                                </Label>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedManagers([])}
+                                  className="h-auto p-1 text-xs"
+                                >
+                                  Clear All
+                                </Button>
+                              </div>
+                              <div className="grid gap-2">
+                                <AnimatePresence>
+                                  {selectedManagers.map((manager) => (
+                                    <motion.div
+                                      key={manager._id}
+                                      initial={{ opacity: 0, scale: 0.95 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      exit={{ opacity: 0, scale: 0.95 }}
+                                      className="flex items-center justify-between p-3 border border-blue-200 rounded-lg bg-blue-50"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
+                                          <Shield className="w-4 h-4 text-blue-600" />
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-medium">{manager.username}</p>
+                                          <p className="text-xs text-muted-foreground">{manager.email}</p>
+                                          <div className="flex gap-1 mt-1">
+                                            {manager.roles?.slice(0, 3).map((role) => (
+                                              <Badge key={role} variant="secondary" className="text-xs">
+                                                {role}
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleManagerToggle(manager)}
+                                        className="h-auto p-1"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </Button>
+                                    </motion.div>
+                                  ))}
+                                </AnimatePresence>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 3: Select Signers */}
+                    {currentStep === 3 && (
+                      <motion.div
+                        key="step-3"
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -20 }}
@@ -710,10 +999,126 @@ export default function SharePointCreateModern() {
                       </motion.div>
                     )}
 
-                    {/* Step 3: Review & Submit */}
-                    {currentStep === 3 && (
+                    {/* Step 4: External Users */}
+                    {currentStep === 4 && (
                       <motion.div
-                        key="step-3"
+                        key="step-4"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        <div className="space-y-2">
+                          <h2 className="text-2xl font-semibold">External Users</h2>
+                          <p className="text-muted-foreground">
+                            Add external users by email who are not registered in the system. They will receive an
+                            invitation email to register and then be able to sign the document once it's approved by
+                            managers.
+                          </p>
+                        </div>
+
+                        <div className="space-y-6">
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Add External Email</Label>
+                            <div className="flex gap-2">
+                              <div className="relative flex-1">
+                                <Mail className="absolute w-4 h-4 left-3 top-3 text-muted-foreground" />
+                                <Input
+                                  placeholder="Enter email address..."
+                                  value={newExternalEmail}
+                                  onChange={(e) => setNewExternalEmail(e.target.value)}
+                                  onKeyPress={(e) => e.key === "Enter" && handleAddExternalEmail()}
+                                  className={cn(
+                                    "pl-10",
+                                    errors.externalEmail && "border-destructive focus:border-destructive",
+                                  )}
+                                />
+                              </div>
+                              <Button onClick={handleAddExternalEmail} disabled={!newExternalEmail.trim()}>
+                                <UserPlus className="w-4 h-4 mr-2" />
+                                Add
+                              </Button>
+                            </div>
+                            {errors.externalEmail && (
+                              <p className="flex items-center gap-1 text-sm text-destructive">
+                                <AlertCircle className="w-3 h-3" />
+                                {errors.externalEmail}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              External users will receive an email invitation to register in the system and sign the
+                              document after manager approval
+                            </p>
+                          </div>
+
+                          {/* External Emails List */}
+                          {externalEmails.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-sm font-medium">External Users ({externalEmails.length})</Label>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setExternalEmails([])}
+                                  className="h-auto p-1 text-xs"
+                                >
+                                  Clear All
+                                </Button>
+                              </div>
+                              <div className="grid gap-2">
+                                <AnimatePresence>
+                                  {externalEmails.map((email) => (
+                                    <motion.div
+                                      key={email}
+                                      initial={{ opacity: 0, scale: 0.95 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      exit={{ opacity: 0, scale: 0.95 }}
+                                      className="flex items-center justify-between p-3 border rounded-lg bg-amber-50 border-amber-200"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-100">
+                                          <Mail className="w-4 h-4 text-amber-600" />
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-medium">{email}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            External user - will receive invitation
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleRemoveExternalEmail(email)}
+                                        className="h-auto p-1"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </Button>
+                                    </motion.div>
+                                  ))}
+                                </AnimatePresence>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Summary */}
+                          <div className="p-4 border rounded-lg bg-muted">
+                            <h4 className="mb-2 text-sm font-medium">Summary</h4>
+                            <div className="space-y-1 text-sm text-muted-foreground">
+                              <p>• {selectedUsers.length} registered users selected</p>
+                              <p>• {externalEmails.length} external users added</p>
+                              <p>• Total signers: {selectedUsers.length + externalEmails.length}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 5: Review & Submit */}
+                    {currentStep === 5 && (
+                      <motion.div
+                        key="step-5"
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -20 }}
@@ -755,9 +1160,30 @@ export default function SharePointCreateModern() {
                                   <p className="text-sm">{formData.comment}</p>
                                 </div>
                               )}
+
+                              <Separator />
+
                               <div>
                                 <Label className="text-sm font-medium text-muted-foreground">
-                                  Signers ({selectedUsers.length})
+                                  Approvers ({selectedManagers.length})
+                                </Label>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {selectedManagers.map((manager) => (
+                                    <Badge
+                                      key={manager._id}
+                                      variant="outline"
+                                      className="text-blue-600 border-blue-200 bg-blue-50"
+                                    >
+                                      <Shield className="w-3 h-3 mr-1" />
+                                      {manager.username}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div>
+                                <Label className="text-sm font-medium text-muted-foreground">
+                                  Registered Signers ({selectedUsers.length})
                                 </Label>
                                 <div className="flex flex-wrap gap-2 mt-2">
                                   {selectedUsers.map((user) => (
@@ -767,6 +1193,26 @@ export default function SharePointCreateModern() {
                                   ))}
                                 </div>
                               </div>
+
+                              {externalEmails.length > 0 && (
+                                <div>
+                                  <Label className="text-sm font-medium text-muted-foreground">
+                                    External Signers ({externalEmails.length})
+                                  </Label>
+                                  <div className="flex flex-wrap gap-2 mt-2">
+                                    {externalEmails.map((email) => (
+                                      <Badge
+                                        key={email}
+                                        variant="outline"
+                                        className="text-amber-600 border-amber-200 bg-amber-50"
+                                      >
+                                        <Mail className="w-3 h-3 mr-1" />
+                                        {email}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </CardContent>
                           </Card>
                         </div>

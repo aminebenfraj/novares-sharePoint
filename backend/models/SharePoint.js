@@ -32,10 +32,14 @@ const sharePointSchema = new mongoose.Schema(
       immutable: true,
     },
 
-    departmentApprover: {
-      type: Boolean,
-      default: false,
-    },
+    // Enhanced approval system
+    managersToApprove: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+      },
+    ],
 
     managerApproved: {
       type: Boolean,
@@ -51,12 +55,25 @@ const sharePointSchema = new mongoose.Schema(
       ref: "User",
     },
 
+    // Enhanced user signing with external users and disapproval
     usersToSign: [
       {
         user: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",
-          required: true,
+          required: function () {
+            return !this.isExternal
+          },
+        },
+        externalEmail: {
+          type: String,
+          required: function () {
+            return this.isExternal
+          },
+        },
+        isExternal: {
+          type: Boolean,
+          default: false,
         },
         hasSigned: {
           type: Boolean,
@@ -70,14 +87,49 @@ const sharePointSchema = new mongoose.Schema(
           trim: true,
           maxlength: 500,
         },
+        hasDisapproved: {
+          type: Boolean,
+          default: false,
+        },
+        disapprovedAt: {
+          type: Date,
+        },
+        disapprovalNote: {
+          type: String,
+          trim: true,
+          maxlength: 500,
+        },
+        invitationSent: {
+          type: Boolean,
+          default: false,
+        },
+        invitationSentAt: {
+          type: Date,
+        },
       },
     ],
+
+    // Document-level disapproval tracking
+    disapprovalNote: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+    },
 
     updateHistory: [
       {
         action: {
           type: String,
-          enum: ["created", "updated", "signed", "approved", "rejected", "deadline_extended"],
+          enum: [
+            "created",
+            "updated",
+            "signed",
+            "approved",
+            "rejected",
+            "disapproved",
+            "relaunched",
+            "deadline_extended",
+          ],
           required: true,
         },
         performedBy: {
@@ -101,8 +153,17 @@ const sharePointSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending_approval", "pending", "in_progress", "completed", "expired", "cancelled", "rejected"],
-      default: "pending_approval", // Changed default to pending_approval
+      enum: [
+        "pending_approval",
+        "pending",
+        "in_progress",
+        "completed",
+        "expired",
+        "cancelled",
+        "rejected",
+        "disapproved",
+      ],
+      default: "pending_approval",
     },
 
     fileMetadata: {
@@ -129,21 +190,27 @@ sharePointSchema.virtual("allUsersSigned").get(function () {
   return this.usersToSign.length > 0 && this.usersToSign.every((user) => user.hasSigned)
 })
 
+sharePointSchema.virtual("hasDisapprovals").get(function () {
+  return this.usersToSign.some((user) => user.hasDisapproved)
+})
+
 sharePointSchema.virtual("completionPercentage").get(function () {
   if (this.usersToSign.length === 0) return 0
   const signedCount = this.usersToSign.filter((user) => user.hasSigned).length
   return Math.round((signedCount / this.usersToSign.length) * 100)
 })
 
-// Updated pre-save middleware to handle the new workflow
+// Enhanced pre-save middleware to handle the new workflow with disapprovals
 sharePointSchema.pre("save", function (next) {
-  // Only allow status changes if manager has approved (except for rejection)
-  if (this.status !== "rejected" && this.status !== "pending_approval") {
+  // Check for disapprovals first
+  if (this.hasDisapprovals) {
+    this.status = "disapproved"
+  } else if (this.status !== "rejected" && this.status !== "pending_approval") {
     if (!this.managerApproved) {
       this.status = "pending_approval"
     } else {
       // Manager has approved, now check signing status
-      if (this.allUsersSigned && this.departmentApprover) {
+      if (this.allUsersSigned) {
         this.status = "completed"
       } else if (this.usersToSign.some((user) => user.hasSigned)) {
         this.status = "in_progress"
@@ -164,6 +231,8 @@ sharePointSchema.pre("save", function (next) {
 sharePointSchema.index({ createdBy: 1, status: 1 })
 sharePointSchema.index({ deadline: 1 })
 sharePointSchema.index({ "usersToSign.user": 1 })
+sharePointSchema.index({ "usersToSign.externalEmail": 1 })
+sharePointSchema.index({ managersToApprove: 1 })
 sharePointSchema.index({ managerApproved: 1 })
 
 module.exports = mongoose.model("SharePoint", sharePointSchema)

@@ -32,5 +32,8 @@ router.put("/:id", protect, sharePointController.updateSharePoint)
 
 // Delete SharePoint
 router.delete("/:id", protect, sharePointController.deleteSharePoint)
+router.post("/:id/disapprove", protect, sharePointController.disapproveSharePoint)
+router.post("/:id/relaunch", protect, sharePointController.relaunchSharePoint)
+
 
 module.exports = router

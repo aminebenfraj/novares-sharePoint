@@ -5,19 +5,39 @@ const BASE_URL = "api/sharepoints"
 
 // Create a new SharePoint document
 export const createSharePoint = (data) => {
-  const { title, link, comment, deadline, usersToSign } = data
+  const { title, link, comment, deadline, usersToSign, managersToApprove, externalEmails } = data
 
   // Validate required fields
-  if (!title || !link || !deadline || !usersToSign || usersToSign.length === 0) {
-    return Promise.reject(new Error("Missing required fields"))
+  if (!title || !link || !deadline) {
+    return Promise.reject(new Error("Title, link, and deadline are required"))
   }
+
+  if (!managersToApprove || managersToApprove.length === 0) {
+    return Promise.reject(new Error("At least one manager must be selected for approval"))
+  }
+
+  if ((!usersToSign || usersToSign.length === 0) && (!externalEmails || externalEmails.length === 0)) {
+    return Promise.reject(new Error("At least one signer must be selected or external email added"))
+  }
+
+  console.log("Creating SharePoint with data:", {
+    title,
+    link,
+    comment,
+    deadline,
+    usersToSign: usersToSign?.length || 0,
+    managersToApprove: managersToApprove?.length || 0,
+    externalEmails: externalEmails?.length || 0,
+  })
 
   return apiRequest("POST", BASE_URL, {
     title,
     link,
     comment,
     deadline,
-    usersToSign,
+    usersToSign: usersToSign || [],
+    managersToApprove: managersToApprove || [],
+    externalEmails: externalEmails || [],
   })
 }
 
@@ -113,6 +133,19 @@ export const canUserSign = async (sharePointId, userId) => {
     console.error("Error checking sign permission:", error)
     throw error
   }
+}
+
+// Disapprove a SharePoint document
+export const disapproveSharePoint = (id, disapprovalNote) => {
+  if (!disapprovalNote || !disapprovalNote.trim()) {
+    return Promise.reject(new Error("Disapproval note is required"))
+  }
+  return apiRequest("POST", `${BASE_URL}/${id}/disapprove`, { disapprovalNote })
+}
+
+// Relaunch a disapproved SharePoint document
+export const relaunchSharePoint = (id) => {
+  return apiRequest("POST", `${BASE_URL}/${id}/relaunch`)
 }
 
 // Get SharePoint statistics

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -303,7 +303,7 @@ export default function SharePointShow() {
 
     const canSign =
       sharePoint?.managerApproved &&
-      sharePoint?.usersToSign?.some((signer) => signer.user._id === currentUser?._id && !signer.hasSigned)
+      sharePoint?.usersToSign?.some((signer) => signer.user?._id === currentUser?._id && !signer.hasSigned)
 
     return (
       <motion.div variants={cardVariants} whileHover="hover" layout>
@@ -402,24 +402,27 @@ export default function SharePointShow() {
 
             <div className="flex items-center gap-2">
               <div className="flex -space-x-2">
-                {sharePoint.usersToSign?.slice(0, 3).map((signer, index) => (
-                  <TooltipProvider key={signer.user._id}>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Avatar className="w-6 h-6 border-2 border-background">
-                          <AvatarImage src={signer.user.image || "/placeholder.svg"} />
-                          <AvatarFallback className="text-xs">
-                            {signer.user.username?.charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{signer.user.username}</p>
-                        <p className="text-xs">{signer.hasSigned ? "Signed" : "Pending"}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ))}
+                {sharePoint.usersToSign?.slice(0, 3).map((signer, index) => {
+                  if (!signer?.user) return null
+
+                  return (
+                    <TooltipProvider key={signer.user._id}>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Avatar className="w-6 h-6 border-2 border-background">
+                            <AvatarFallback className="text-xs">
+                              {signer.user.username?.charAt(0).toUpperCase() || "?"}
+                            </AvatarFallback>
+                          </Avatar>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{signer.user.username || "Unknown User"}</p>
+                          <p className="text-xs">{signer.hasSigned ? "Signed" : "Pending"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )
+                })}
                 {sharePoint.usersToSign?.length > 3 && (
                   <div className="flex items-center justify-center w-6 h-6 border-2 rounded-full bg-muted border-background">
                     <span className="text-xs text-muted-foreground">+{sharePoint.usersToSign.length - 3}</span>
@@ -528,7 +531,7 @@ export default function SharePointShow() {
       currentUser?.roles?.includes("Admin") && sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved
     const canSign =
       sharePoint?.managerApproved &&
-      sharePoint?.usersToSign?.some((signer) => signer.user._id === currentUser?._id && !signer.hasSigned)
+      sharePoint?.usersToSign?.some((signer) => signer.user?._id === currentUser?._id && !signer.hasSigned)
 
     return (
       <motion.div variants={itemVariants}>
