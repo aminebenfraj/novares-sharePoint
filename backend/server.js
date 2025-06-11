@@ -20,7 +20,7 @@ const server = http.createServer(app);
 // Middleware
 app.use(cors({
   origin: [
-    'https://machine-alert-frontend.onrender.com',
+    'https://novares-sharepoint.onrender.com',
     'http://localhost:3000', // For local development
     'http://localhost:5173'  // For Vite default port if you're using it
   ],
