@@ -771,21 +771,21 @@ exports.relaunchSharePoint = async (req, res) => {
     sharePoint.approvedAt = null
     sharePoint.disapprovalNote = null
 
-    // Reset all user signatures and disapprovals
+    // Reset user signatures and disapprovals - MODIFIED to preserve existing approvals
     sharePoint.usersToSign.forEach((signer) => {
-      signer.hasSigned = false
-      signer.signedAt = null
-      signer.signatureNote = null
+      // Only reset disapprovals and disapproval-related fields
+      // Keep existing approvals (hasSigned, signedAt, signatureNote) intact
       signer.hasDisapproved = false
       signer.disapprovedAt = null
       signer.disapprovalNote = null
+      // Do NOT reset: hasSigned, signedAt, signatureNote
     })
 
     // Add to history
     sharePoint.updateHistory.push({
       action: "relaunched",
       performedBy: req.user._id,
-      details: "Document relaunched for re-approval after disapproval",
+      details: "Document relaunched for re-approval after disapproval. Existing user approvals preserved, manager approval reset.",
     })
 
     await sharePoint.save()
@@ -822,7 +822,7 @@ exports.relaunchSharePoint = async (req, res) => {
     }
 
     res.json({
-      message: "SharePoint relaunched successfully. Managers have been notified for re-approval.",
+      message: "SharePoint relaunched successfully. Managers have been notified for re-approval. Existing user approvals have been preserved.",
       sharePoint: responseData,
     })
   } catch (error) {
