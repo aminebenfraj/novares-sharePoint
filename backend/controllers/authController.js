@@ -150,27 +150,27 @@ exports.loginUser = async (req, res) => {
 // Get Current User - Simplified
 exports.currentUser = async (req, res) => {
   try {
-    // User is already attached to req by the auth middleware
     if (!req.user) {
-      return res.status(404).json({ error: "User not found" })
+      return res.status(404).json({ error: "User not found" });
     }
 
-    // Return user data without password
+    // Return user data including _id, excluding password
     res.json({
+      _id: req.user._id, // Add _id
       license: req.user.license,
       username: req.user.username,
       email: req.user.email,
       roles: req.user.roles,
       image: req.user.image,
-    })
+    });
   } catch (error) {
-    console.error("Error fetching current user:", error)
+    console.error("Error fetching current user:", error);
     res.status(500).json({
       error: "Server error while fetching user data",
       requestId: Date.now().toString(36),
-    })
+    });
   }
-}
+};
 
 // Logout user - New function to handle proper logout
 exports.logoutUser = (req, res) => {

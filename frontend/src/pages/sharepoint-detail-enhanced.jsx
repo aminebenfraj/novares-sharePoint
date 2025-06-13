@@ -63,6 +63,9 @@ import { useAuth } from "../context/AuthContext"
 import MainLayout from "../components/MainLayout"
 import WorkflowStatusIndicator from "../components/workflow-status-indicator"
 
+// Add the import for getCurrentUser at the top with other imports
+import { getCurrentUser } from "../apis/auth"
+
 // Animation variants
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -125,6 +128,9 @@ export default function SharePointDetailEnhanced({
   const [showRelaunchDialog, setShowRelaunchDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
+  // Add a new state for the current user info
+  const [currentUserInfo, setCurrentUserInfo] = useState(null)
+
   const handleBack = () => {
     if (propOnBack) {
       propOnBack()
@@ -153,6 +159,22 @@ export default function SharePointDetailEnhanced({
       setLoading(false)
     }
   }, [documentId])
+
+  // Add this useEffect after the existing useEffect for loading SharePoint details
+  useEffect(() => {
+    // Fetch current user information
+    const fetchCurrentUser = async () => {
+      try {
+        const userData = await getCurrentUser()
+        setCurrentUserInfo(userData)
+        console.log("Current user info loaded:", userData)
+      } catch (error) {
+        console.error("Error fetching current user:", error)
+      }
+    }
+
+    fetchCurrentUser()
+  }, [])
 
   const loadSharePointDetails = async () => {
     try {
@@ -428,13 +450,43 @@ export default function SharePointDetailEnhanced({
   const isRejected = sharePoint?.status === "rejected"
   const canRelaunch = sharePoint?.createdBy?.license === activeUser?.license && (isDisapproved || isRejected)
 
-  // Check if current user is a selected manager for this document
+  // Update the isSelectedManager check to use currentUserInfo
+  // Replace the existing isSelectedManager definition with this:
   const isSelectedManager = sharePoint?.managersToApprove?.some((managerId) => {
-    return managerId === activeUser?._id || managerId === activeUser?.license
+    // Convert both to strings for comparison
+    const managerIdStr = String(managerId)
+
+    // Use currentUserInfo if available, otherwise fall back to activeUser
+    const userIdStr = currentUserInfo ? String(currentUserInfo._id) : String(activeUser?._id)
+    const userLicenseStr = currentUserInfo ? String(currentUserInfo.license) : String(activeUser?.license)
+
+    // Check if manager ID matches either user ID or license
+    const isManager = managerIdStr === userIdStr || managerIdStr === userLicenseStr
+
+    // Log for debugging
+    if (sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved) {
+      console.log("Document needs approval:", sharePoint.title)
+      console.log("Current user info:", currentUserInfo)
+      console.log("Manager ID being checked:", managerId)
+      console.log("Manager ID (string):", managerIdStr)
+      console.log("User ID (string):", userIdStr)
+      console.log("User license (string):", userLicenseStr)
+      console.log("Is manager:", isManager)
+    }
+
+    return isManager
   })
 
   // Manager can approve/reject only if they are selected and document is pending approval
   const canManagerApprove = isSelectedManager && sharePoint?.status === "pending_approval" && !hasManagerApproved
+
+  // Log additional information for debugging
+  if (sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved) {
+    console.log("Can manager approve:", canManagerApprove)
+    console.log("Is selected manager:", isSelectedManager)
+    console.log("Document status:", sharePoint?.status)
+    console.log("Has manager approved:", hasManagerApproved)
+  }
 
   // Find the current user in the signers list
   const currentUserLicense = activeUser?.license || user?.license

@@ -64,6 +64,7 @@ import {
 import { toast } from "@/hooks/use-toast"
 import { useAuth } from "../context/AuthContext"
 import MainLayout from "../components/MainLayout"
+import { getCurrentUser } from "../apis/auth"
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -115,6 +116,7 @@ export default function SharePointShow() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  // Add a new function to get documents assigned to the current user for approval
   const [viewFilter, setViewFilter] = useState("all")
   const [sortBy, setSortBy] = useState("createdAt")
   const [sortOrder, setSortOrder] = useState("desc")
@@ -125,6 +127,7 @@ export default function SharePointShow() {
     totalPages: 1,
     totalItems: 0,
   })
+  const [currentUserInfo, setCurrentUserInfo] = useState(null)
 
   // Navigation handlers
   const handleViewDetail = (id) => {
@@ -143,6 +146,23 @@ export default function SharePointShow() {
     loadSharePoints()
   }, [viewFilter, statusFilter, sortBy, sortOrder, pagination.currentPage])
 
+  // Add this useEffect after the existing useEffect for loadSharePoints
+  useEffect(() => {
+    // Fetch current user information
+    const fetchCurrentUser = async () => {
+      try {
+        const userData = await getCurrentUser()
+        setCurrentUserInfo(userData)
+        console.log("Current user info loaded:", userData)
+      } catch (error) {
+        console.error("Error fetching current user:", error)
+      }
+    }
+
+    fetchCurrentUser()
+  }, [])
+
+  // Update the loadSharePoints function to handle the new filter
   const loadSharePoints = async () => {
     try {
       setLoading(true)
@@ -160,6 +180,10 @@ export default function SharePointShow() {
           break
         case "created":
           response = await getMyCreatedSharePoints(filters)
+          break
+        case "to_approve":
+          // This will use the updated backend filter that includes managersToApprove
+          response = await getAllSharePoints({ ...filters, needsManagerApproval: true })
           break
         default:
           response = await getAllSharePoints(filters)
@@ -298,8 +322,30 @@ export default function SharePointShow() {
     const completionPercentage = sharePoint.completionPercentage || 0
     const canEdit = sharePoint.createdBy?._id === currentUser?._id || currentUser?.roles?.includes("Admin")
 
+    // Check if current user is in the managersToApprove array and document needs approval
     const canApprove =
-      currentUser?.roles?.includes("Admin") && sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved
+      sharePoint?.managersToApprove?.some((managerId) => {
+        // Convert both to strings for comparison
+        const managerIdStr = String(managerId)
+
+        // Use currentUserInfo if available, otherwise fall back to currentUser
+        const userIdStr = currentUserInfo ? String(currentUserInfo._id) : String(currentUser?._id)
+        const userLicenseStr = currentUserInfo ? String(currentUserInfo.license) : String(currentUser?.license)
+
+        // Check if manager ID matches either user ID or license
+        return managerIdStr === userIdStr || managerIdStr === userLicenseStr
+      }) &&
+      sharePoint?.status === "pending_approval" &&
+      !sharePoint?.managerApproved
+
+    // Log for debugging
+    if (sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved) {
+      console.log("Document needs approval:", sharePoint.title)
+      console.log("Current user ID:", currentUser?._id)
+      console.log("Current user license:", currentUser?.license)
+      console.log("Managers to approve:", sharePoint?.managersToApprove)
+      console.log("Can approve:", canApprove)
+    }
 
     const canSign =
       sharePoint?.managerApproved &&
@@ -528,7 +574,19 @@ export default function SharePointShow() {
     const completionPercentage = sharePoint.completionPercentage || 0
     const canEdit = sharePoint.createdBy?._id === currentUser?._id || currentUser?.roles?.includes("Admin")
     const canApprove =
-      currentUser?.roles?.includes("Admin") && sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved
+      sharePoint?.managersToApprove?.some((managerId) => {
+        // Convert both to strings for comparison
+        const managerIdStr = String(managerId)
+
+        // Use currentUserInfo if available, otherwise fall back to currentUser
+        const userIdStr = currentUserInfo ? String(currentUserInfo._id) : String(currentUser?._id)
+        const userLicenseStr = currentUserInfo ? String(currentUserInfo.license) : String(currentUser?.license)
+
+        // Check if manager ID matches either user ID or license
+        return managerIdStr === userIdStr || managerIdStr === userLicenseStr
+      }) &&
+      sharePoint?.status === "pending_approval" &&
+      !sharePoint?.managerApproved
     const canSign =
       sharePoint?.managerApproved &&
       sharePoint?.usersToSign?.some((signer) => signer.user?._id === currentUser?._id && !signer.hasSigned)
@@ -784,6 +842,7 @@ export default function SharePointShow() {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      {/* Update the Select component for viewFilter to include the new option */}
                       <Select value={viewFilter} onValueChange={setViewFilter}>
                         <SelectTrigger className="w-[150px]">
                           <SelectValue placeholder="View" />
@@ -792,6 +851,7 @@ export default function SharePointShow() {
                           <SelectItem value="all">All Documents</SelectItem>
                           <SelectItem value="assigned">Assigned to Me</SelectItem>
                           <SelectItem value="created">Created by Me</SelectItem>
+                          <SelectItem value="to_approve">To Approve</SelectItem>
                         </SelectContent>
                       </Select>
 

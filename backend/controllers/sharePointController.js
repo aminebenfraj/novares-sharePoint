@@ -278,9 +278,15 @@ exports.getAllSharePoints = async (req, res) => {
       filter.$or = [{ title: { $regex: search, $options: "i" } }, { comment: { $regex: search, $options: "i" } }]
     }
 
-    // For non-admin users, only show SharePoints they created or are assigned to
+    // For non-admin users, only show SharePoints they created, are assigned to, or are assigned to approve
     if (!req.user.roles.includes("Admin")) {
-      const userFilter = { $or: [{ createdBy: req.user._id }, { "usersToSign.user": req.user._id }] }
+      const userFilter = {
+        $or: [
+          { createdBy: req.user._id },
+          { "usersToSign.user": req.user._id },
+          { managersToApprove: req.user._id }, // Include documents where user is in managersToApprove
+        ],
+      }
       filter.$and = filter.$and ? [...filter.$and, userFilter] : [userFilter]
     }
 
@@ -348,10 +354,12 @@ exports.getSharePointById = async (req, res) => {
       return res.status(404).json({ error: "SharePoint not found" })
     }
 
+    // Check if user is admin, creator, signer, or assigned manager
     const canView =
       req.user.roles.includes("Admin") ||
       sharePoint.createdBy._id.toString() === req.user._id.toString() ||
-      sharePoint.usersToSign.some((signer) => signer.user._id.toString() === req.user._id.toString())
+      sharePoint.usersToSign.some((signer) => signer.user && signer.user._id.toString() === req.user._id.toString()) ||
+      sharePoint.managersToApprove.some((managerId) => managerId.toString() === req.user._id.toString())
 
     if (!canView) {
       return res.status(403).json({ error: "You don't have permission to view this SharePoint" })
@@ -785,7 +793,8 @@ exports.relaunchSharePoint = async (req, res) => {
     sharePoint.updateHistory.push({
       action: "relaunched",
       performedBy: req.user._id,
-      details: "Document relaunched for re-approval after disapproval. Existing user approvals preserved, manager approval reset.",
+      details:
+        "Document relaunched for re-approval after disapproval. Existing user approvals preserved, manager approval reset.",
     })
 
     await sharePoint.save()
@@ -822,7 +831,8 @@ exports.relaunchSharePoint = async (req, res) => {
     }
 
     res.json({
-      message: "SharePoint relaunched successfully. Managers have been notified for re-approval. Existing user approvals have been preserved.",
+      message:
+        "SharePoint relaunched successfully. Managers have been notified for re-approval. Existing user approvals have been preserved.",
       sharePoint: responseData,
     })
   } catch (error) {
@@ -900,14 +910,28 @@ exports.approveSharePoint = async (req, res) => {
       return res.status(404).json({ error: "SharePoint not found" })
     }
 
-    // Check if user has manager role - Fixed logic
-    const managerRoles = ["Admin", "Manager", "Project Manager", "Business Manager", "Department Manager"]
-    const hasManagerRole = req.user.roles && req.user.roles.some((role) => managerRoles.includes(role))
+    // Check if user is in the managersToApprove array
+    const isSelectedManager = sharePoint.managersToApprove.some((managerId) => {
+      const managerIdStr = String(managerId)
+      const userIdStr = String(req.user._id)
+      const userLicenseStr = String(req.user.license)
 
-    if (!hasManagerRole) {
-      console.log("User roles:", req.user.roles)
-      console.log("Required manager roles:", managerRoles)
-      return res.status(403).json({ error: "You don't have permission to approve SharePoints" })
+      // Log for debugging
+      console.log("Approval check - Manager ID:", managerIdStr)
+      console.log("Approval check - User ID:", userIdStr)
+      console.log("Approval check - User license:", userLicenseStr)
+
+      return managerIdStr === userIdStr || managerIdStr === userLicenseStr
+    })
+
+    if (!isSelectedManager) {
+      console.log("User is not in the managersToApprove list for this document")
+      console.log("User ID:", req.user._id)
+      console.log("User license:", req.user.license)
+      console.log("Managers to approve:", sharePoint.managersToApprove)
+      return res
+        .status(403)
+        .json({ error: "You don't have permission to approve this document. Only selected managers can approve." })
     }
 
     sharePoint.managerApproved = approved
@@ -1005,5 +1029,60 @@ exports.canUserSign = async (req, res) => {
   } catch (error) {
     console.error("Error checking sign permission:", error)
     res.status(500).json({ error: "Error checking sign permission" })
+  }
+}
+
+// Add a new function to get documents that need approval from the current user
+exports.getMyApprovalSharePoints = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10, sortBy = "createdAt", sortOrder = "desc", search = "" } = req.query
+
+    const filter = {
+      managersToApprove: req.user._id,
+      status: "pending_approval",
+      managerApproved: { $ne: true },
+    }
+
+    if (status && status !== "all") filter.status = status
+
+    // Add search functionality
+    if (search) {
+      filter.$or = [{ title: { $regex: search, $options: "i" } }, { comment: { $regex: search, $options: "i" } }]
+    }
+
+    const sort = {}
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1
+
+    const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit)
+    const sharePoints = await SharePoint.find(filter)
+      .populate("createdBy", "username email roles")
+      .populate("usersToSign.user", "username email roles")
+      .sort(sort)
+      .skip(skip)
+      .limit(Number.parseInt(limit))
+      .lean()
+
+    // Add completion data to each sharePoint
+    const sharePointsWithCompletion = sharePoints.map((sharePoint) => {
+      const completionData = calculateCompletionData(sharePoint)
+      return { ...sharePoint, ...completionData }
+    })
+
+    const total = await SharePoint.countDocuments(filter)
+
+    res.json({
+      sharePoints: sharePointsWithCompletion,
+      pagination: {
+        currentPage: Number.parseInt(page),
+        totalPages: Math.ceil(total / Number.parseInt(limit)),
+        totalItems: total,
+        itemsPerPage: Number.parseInt(limit),
+        hasNextPage: Number.parseInt(page) < Math.ceil(total / Number.parseInt(limit)),
+        hasPrevPage: Number.parseInt(page) > 1,
+      },
+    })
+  } catch (error) {
+    console.error("Error fetching approval SharePoints:", error)
+    res.status(500).json({ error: "Error fetching approval SharePoints" })
   }
 }
