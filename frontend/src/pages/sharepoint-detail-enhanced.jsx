@@ -489,22 +489,47 @@ export default function SharePointDetailEnhanced({
   }
 
   // Find the current user in the signers list
-  const currentUserLicense = activeUser?.license || user?.license
-  const currentUserUsername = activeUser?.username || user?.username
-  const currentUserId = activeUser?._id || user?._id
+ const currentUserLicense = currentUserInfo?.license || activeUser?.license;
+const currentUserUsername = currentUserInfo?.username || activeUser?.username;
+const currentUserId = currentUserInfo?._id || activeUser?._id;
 
-  const userSigner = sharePoint?.usersToSign?.find((signer) => {
-    if (!signer?.user) return false
-    if (currentUserUsername && signer.user.username === currentUserUsername) return true
-    if (currentUserId && signer.user._id === currentUserId) return true
-    if (currentUserLicense && signer.user.license === currentUserLicense) return true
-    return false
-  })
+const userSigner = sharePoint?.usersToSign?.find((signer) => {
+  if (!signer?.user) return false;
+  const signerId = String(signer.user._id);
+  const signerUsername = String(signer.user.username);
+  const signerLicense = String(signer.user.license);
+  const userId = String(currentUserId);
+  const userUsername = String(currentUserUsername);
+  const userLicense = String(currentUserLicense);
 
-  // User can approve/disapprove only after manager approval and if they haven't acted yet
-  const canUserApprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved
-  const canUserDisapprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved
+  // Log for debugging
+  console.log("Checking signer:", {
+    signerId,
+    signerUsername,
+    signerLicense,
+    userId,
+    userUsername,
+    userLicense,
+  });
 
+  return (
+    (userId && signerId === userId) ||
+    (userUsername && signerUsername === userUsername) ||
+    (userLicense && signerLicense === userLicense)
+  );
+});
+
+// User can approve/disapprove only after manager approval and if they haven't acted yet
+const canUserApprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved;
+const canUserDisapprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved;
+
+// Log for debugging
+console.log("User approval permissions:", {
+  hasManagerApproved,
+  userSigner: userSigner ? { username: userSigner.user.username, hasSigned: userSigner.hasSigned, hasDisapproved: userSigner.hasDisapproved } : null,
+  canUserApprove,
+  canUserDisapprove,
+});
   return (
     <MainLayout>
       <div className="min-h-screen bg-background">

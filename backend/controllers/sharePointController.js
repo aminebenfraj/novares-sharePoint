@@ -757,47 +757,54 @@ exports.relaunchSharePoint = async (req, res) => {
     const sharePoint = await SharePoint.findById(req.params.id)
       .populate("createdBy", "username email roles")
       .populate("managersToApprove", "username email roles")
+      .populate("usersToSign.user", "username email roles");
 
     if (!sharePoint) {
-      return res.status(404).json({ error: "SharePoint not found" })
+      return res.status(404).json({ error: "SharePoint not found" });
     }
 
     // Check if user is the creator
     if (sharePoint.createdBy._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ error: "Only the document creator can relaunch the document" })
+      return res.status(403).json({ error: "Only the document creator can relaunch the document" });
     }
 
     // Check if document is disapproved
     if (sharePoint.status !== "disapproved") {
-      return res.status(400).json({ error: "Only disapproved documents can be relaunched" })
+      return res.status(400).json({ error: "Only disapproved documents can be relaunched" });
     }
 
     // Reset document status and approvals
-    sharePoint.status = "pending_approval"
-    sharePoint.managerApproved = false
-    sharePoint.approvedBy = null
-    sharePoint.approvedAt = null
-    sharePoint.disapprovalNote = null
+    sharePoint.status = "pending_approval";
+    sharePoint.managerApproved = false;
+    sharePoint.approvedBy = null;
+    sharePoint.approvedAt = null;
+    sharePoint.disapprovalNote = null;
 
-    // Reset user signatures and disapprovals - MODIFIED to preserve existing approvals
-    sharePoint.usersToSign.forEach((signer) => {
-      // Only reset disapprovals and disapproval-related fields
-      // Keep existing approvals (hasSigned, signedAt, signatureNote) intact
-      signer.hasDisapproved = false
-      signer.disapprovedAt = null
-      signer.disapprovalNote = null
+    // Reset user disapprovals (preserve approvals as per current logic)
+    const resetSigners = sharePoint.usersToSign.map((signer) => ({
+      ...signer.toObject(),
+      hasDisapproved: false,
+      disapprovedAt: null,
+      disapprovalNote: null,
       // Do NOT reset: hasSigned, signedAt, signatureNote
-    })
+    }));
+    sharePoint.usersToSign = resetSigners;
+
+    // Log the reset state for debugging
+    console.log("Relaunched SharePoint signers:", sharePoint.usersToSign.map(s => ({
+      user: s.user?.username || s.externalEmail,
+      hasSigned: s.hasSigned,
+      hasDisapproved: s.hasDisapproved,
+    })));
 
     // Add to history
     sharePoint.updateHistory.push({
       action: "relaunched",
       performedBy: req.user._id,
-      details:
-        "Document relaunched for re-approval after disapproval. Existing user approvals preserved, manager approval reset.",
-    })
+      details: "Document relaunched for re-approval after disapproval. Existing user approvals preserved, disapprovals reset, manager approval reset.",
+    });
 
-    await sharePoint.save()
+    await sharePoint.save();
 
     // Send notification to managers for re-approval
     try {
@@ -810,36 +817,35 @@ exports.relaunchSharePoint = async (req, res) => {
           createdBy: req.user.username,
           requiresApproval: true,
           isRelaunch: true,
-        }),
-      )
-
-      await Promise.allSettled(managerEmailPromises)
+        })
+      );
+      await Promise.allSettled(managerEmailPromises);
+      console.log("Manager re-approval notifications sent successfully");
     } catch (emailError) {
-      console.error("❌ Failed to send relaunch notifications:", emailError)
+      console.error("Failed to send relaunch notifications:", emailError);
     }
 
     await sharePoint.populate([
       { path: "createdBy", select: "username email roles" },
       { path: "usersToSign.user", select: "username email roles" },
-    ])
+    ]);
 
     // Calculate completion data
-    const completionData = calculateCompletionData(sharePoint)
+    const completionData = calculateCompletionData(sharePoint);
     const responseData = {
       ...sharePoint.toObject(),
       ...completionData,
-    }
+    };
 
     res.json({
-      message:
-        "SharePoint relaunched successfully. Managers have been notified for re-approval. Existing user approvals have been preserved.",
+      message: "SharePoint relaunched successfully. Managers have been notified for re-approval. User disapprovals have been reset, and existing approvals preserved.",
       sharePoint: responseData,
-    })
+    });
   } catch (error) {
-    console.error("Error relaunching SharePoint:", error)
-    res.status(500).json({ error: "Error relaunching SharePoint" })
+    console.error("Error relaunching SharePoint:", error);
+    res.status(500).json({ error: "Error relaunching SharePoint" });
   }
-}
+};
 
 // Send notification to document creator when document is disapproved
 const sendSharePointRelaunchEmail = async ({
