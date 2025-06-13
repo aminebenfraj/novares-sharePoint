@@ -1,4 +1,4 @@
-"use client"
+
 
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
@@ -62,9 +62,9 @@ import { toast } from "@/hooks/use-toast"
 import { useAuth } from "../context/AuthContext"
 import MainLayout from "../components/MainLayout"
 import WorkflowStatusIndicator from "../components/workflow-status-indicator"
-
-// Add the import for getCurrentUser at the top with other imports
 import { getCurrentUser } from "../apis/auth"
+// Import html2pdf.js for PDF generation
+import html2pdf from "html2pdf.js"
 
 // Animation variants
 const containerVariants = {
@@ -127,8 +127,6 @@ export default function SharePointDetailEnhanced({
   const [showManagerRejectDialog, setShowManagerRejectDialog] = useState(false)
   const [showRelaunchDialog, setShowRelaunchDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-
-  // Add a new state for the current user info
   const [currentUserInfo, setCurrentUserInfo] = useState(null)
 
   const handleBack = () => {
@@ -160,9 +158,7 @@ export default function SharePointDetailEnhanced({
     }
   }, [documentId])
 
-  // Add this useEffect after the existing useEffect for loading SharePoint details
   useEffect(() => {
-    // Fetch current user information
     const fetchCurrentUser = async () => {
       try {
         const userData = await getCurrentUser()
@@ -172,7 +168,6 @@ export default function SharePointDetailEnhanced({
         console.error("Error fetching current user:", error)
       }
     }
-
     fetchCurrentUser()
   }, [])
 
@@ -334,6 +329,58 @@ export default function SharePointDetailEnhanced({
     }
   }
 
+  // New function to handle PDF generation of the history tab
+  const handlePrintHistoryAsPDF = () => {
+    const historyElement = document.getElementById("history-content")
+    if (!historyElement) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "History content not found.",
+      })
+      return
+    }
+
+    const opt = {
+      margin: [10, 10, 10, 10], // top, right, bottom, left in mm
+      filename: `SharePoint_History_${sharePoint._id}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    }
+
+    // Create a clone of the history content to avoid modifying the original DOM
+    const clone = historyElement.cloneNode(true)
+    const container = document.createElement("div")
+    container.style.padding = "20px"
+    container.style.backgroundColor = "#fff"
+    container.appendChild(clone)
+
+    // Add a header to the PDF
+    const header = document.createElement("div")
+    header.style.textAlign = "center"
+    header.style.marginBottom = "20px"
+    header.innerHTML = `
+      <h1 style="font-size: 20px; color: #333;">SharePoint Document History</h1>
+      <p style="font-size: 14px; color: #666;">Document: ${sharePoint.title}</p>
+      <p style="font-size: 12px; color: #666;">ID: ${sharePoint._id}</p>
+    `
+    container.prepend(header)
+
+    html2pdf()
+      .set(opt)
+      .from(container)
+      .save()
+      .catch((err) => {
+        console.error("Error generating PDF:", err)
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to generate PDF. Please try again.",
+        })
+      })
+  }
+
   const getStatusColor = (status) => {
     switch (status) {
       case "completed":
@@ -450,20 +497,11 @@ export default function SharePointDetailEnhanced({
   const isRejected = sharePoint?.status === "rejected"
   const canRelaunch = sharePoint?.createdBy?.license === activeUser?.license && (isDisapproved || isRejected)
 
-  // Update the isSelectedManager check to use currentUserInfo
-  // Replace the existing isSelectedManager definition with this:
   const isSelectedManager = sharePoint?.managersToApprove?.some((managerId) => {
-    // Convert both to strings for comparison
     const managerIdStr = String(managerId)
-
-    // Use currentUserInfo if available, otherwise fall back to activeUser
     const userIdStr = currentUserInfo ? String(currentUserInfo._id) : String(activeUser?._id)
     const userLicenseStr = currentUserInfo ? String(currentUserInfo.license) : String(activeUser?.license)
-
-    // Check if manager ID matches either user ID or license
     const isManager = managerIdStr === userIdStr || managerIdStr === userLicenseStr
-
-    // Log for debugging
     if (sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved) {
       console.log("Document needs approval:", sharePoint.title)
       console.log("Current user info:", currentUserInfo)
@@ -473,14 +511,9 @@ export default function SharePointDetailEnhanced({
       console.log("User license (string):", userLicenseStr)
       console.log("Is manager:", isManager)
     }
-
     return isManager
   })
 
-  // Manager can approve/reject only if they are selected and document is pending approval
-  const canManagerApprove = isSelectedManager && sharePoint?.status === "pending_approval" && !hasManagerApproved
-
-  // Log additional information for debugging
   if (sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved) {
     console.log("Can manager approve:", canManagerApprove)
     console.log("Is selected manager:", isSelectedManager)
@@ -488,48 +521,47 @@ export default function SharePointDetailEnhanced({
     console.log("Has manager approved:", hasManagerApproved)
   }
 
-  // Find the current user in the signers list
- const currentUserLicense = currentUserInfo?.license || activeUser?.license;
-const currentUserUsername = currentUserInfo?.username || activeUser?.username;
-const currentUserId = currentUserInfo?._id || activeUser?._id;
+  const canManagerApprove = isSelectedManager && sharePoint?.status === "pending_approval" && !hasManagerApproved
 
-const userSigner = sharePoint?.usersToSign?.find((signer) => {
-  if (!signer?.user) return false;
-  const signerId = String(signer.user._id);
-  const signerUsername = String(signer.user.username);
-  const signerLicense = String(signer.user.license);
-  const userId = String(currentUserId);
-  const userUsername = String(currentUserUsername);
-  const userLicense = String(currentUserLicense);
+  const currentUserLicense = currentUserInfo?.license || activeUser?.license;
+  const currentUserUsername = currentUserInfo?.username || activeUser?.username;
+  const currentUserId = currentUserInfo?._id || activeUser?._id;
 
-  // Log for debugging
-  console.log("Checking signer:", {
-    signerId,
-    signerUsername,
-    signerLicense,
-    userId,
-    userUsername,
-    userLicense,
+  const userSigner = sharePoint?.usersToSign?.find((signer) => {
+    if (!signer?.user) return false;
+    const signerId = String(signer.user._id);
+    const signerUsername = String(signer.user.username);
+    const signerLicense = String(signer.user.license);
+    const userId = String(currentUserId);
+    const userUsername = String(currentUserUsername);
+    const userLicense = String(currentUserLicense);
+
+    console.log("Checking signer:", {
+      signerId,
+      signerUsername,
+      signerLicense,
+      userId,
+      userUsername,
+      userLicense,
+    });
+
+    return (
+      (userId && signerId === userId) ||
+      (userUsername && signerUsername === userUsername) ||
+      (userLicense && signerLicense === userLicense)
+    );
   });
 
-  return (
-    (userId && signerId === userId) ||
-    (userUsername && signerUsername === userUsername) ||
-    (userLicense && signerLicense === userLicense)
-  );
-});
+  const canUserApprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved;
+  const canUserDisapprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved;
 
-// User can approve/disapprove only after manager approval and if they haven't acted yet
-const canUserApprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved;
-const canUserDisapprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved;
+  console.log("User approval permissions:", {
+    hasManagerApproved,
+    userSigner: userSigner ? { username: userSigner.user.username, hasSigned: userSigner.hasSigned, hasDisapproved: userSigner.hasDisapproved } : null,
+    canUserApprove,
+    canUserDisapprove,
+  });
 
-// Log for debugging
-console.log("User approval permissions:", {
-  hasManagerApproved,
-  userSigner: userSigner ? { username: userSigner.user.username, hasSigned: userSigner.hasSigned, hasDisapproved: userSigner.hasDisapproved } : null,
-  canUserApprove,
-  canUserDisapprove,
-});
   return (
     <MainLayout>
       <div className="min-h-screen bg-background">
@@ -884,11 +916,11 @@ console.log("User approval permissions:", {
                                     <span className="text-sm font-medium text-blue-700">What happens next?</span>
                                   </div>
                                   <ul className="space-y-1 text-xs text-blue-600">
-                                    <li>• All approvals will be cleared</li>
-                                    <li>• All disapprovals will be cleared</li>
-                                    <li>• Managers will receive new approval notifications</li>
-                                    <li>• Users can approve again once re-approved by manager</li>
-                                    <li>• History will be preserved</li>
+                                    <li>â€¢ All approvals will be cleared</li>
+                                    <li>â€¢ All disapprovals will be cleared</li>
+                                    <li>â€¢ Managers will receive new approval notifications</li>
+                                    <li>â€¢ Users can approve again once re-approved by manager</li>
+                                    <li>â€¢ History will be preserved</li>
                                   </ul>
                                 </div>
                               </div>
@@ -1202,12 +1234,18 @@ console.log("User approval permissions:", {
                   <TabsContent value="history" className="mt-6">
                     <Card>
                       <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <History className="w-5 h-5 text-primary" />
-                          Update History ({sharePoint.updateHistory?.length || 0} events)
+                        <CardTitle className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <History className="w-5 h-5 text-primary" />
+                            Update History ({sharePoint.updateHistory?.length || 0} events)
+                          </div>
+                          <Button variant="outline" size="sm" onClick={handlePrintHistoryAsPDF}>
+                            <Download className="w-4 h-4 mr-2" />
+                            Print History as PDF
+                          </Button>
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent id="history-content">
                         <div className="space-y-4">
                           {sharePoint.updateHistory?.map((event, index) => (
                             <div key={index} className="relative pb-6 pl-6">
