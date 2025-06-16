@@ -1,4 +1,4 @@
-
+"use client"
 
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
@@ -189,6 +189,52 @@ export default function SharePointDetailEnhanced({
       setLoading(false)
     }
   }
+
+  // After sharePoint data is loaded, calculate all derived values in proper order
+  const isExpired = sharePoint && new Date(sharePoint.deadline) < new Date()
+  const completionPercentage = sharePoint?.completionPercentage || 0
+  const canEdit = sharePoint?.createdBy?.license === activeUser?.license || activeUser?.roles?.includes("Admin")
+  const hasManagerApproved = sharePoint?.managerApproved
+  const allApproved = sharePoint?.allUsersSigned
+  const isDisapproved = sharePoint?.status === "disapproved" || sharePoint?.status === "cancelled"
+  const isRejected = sharePoint?.status === "rejected"
+  const canRelaunch = sharePoint?.createdBy?.license === activeUser?.license && (isDisapproved || isRejected)
+
+  // Calculate user permissions
+  const currentUserLicense = currentUserInfo?.license || activeUser?.license
+  const currentUserUsername = currentUserInfo?.username || activeUser?.username
+  const currentUserId = currentUserInfo?._id || activeUser?._id
+
+  // Check if current user is a selected manager
+  const isSelectedManager = sharePoint?.managersToApprove?.some((managerId) => {
+    const managerIdStr = String(managerId)
+    const userIdStr = currentUserInfo ? String(currentUserInfo._id) : String(activeUser?._id)
+    const userLicenseStr = currentUserInfo ? String(currentUserInfo.license) : String(activeUser?.license)
+    return managerIdStr === userIdStr || managerIdStr === userLicenseStr
+  })
+
+  // NOW declare canManagerApprove after all dependencies are available
+  const canManagerApprove = isSelectedManager && sharePoint?.status === "pending_approval" && !hasManagerApproved
+
+  // Find current user as signer
+  const userSigner = sharePoint?.usersToSign?.find((signer) => {
+    if (!signer?.user) return false
+    const signerId = String(signer.user._id)
+    const signerUsername = String(signer.user.username)
+    const signerLicense = String(signer.user.license)
+    const userId = String(currentUserId)
+    const userUsername = String(currentUserUsername)
+    const userLicense = String(currentUserLicense)
+
+    return (
+      (userId && signerId === userId) ||
+      (userUsername && signerUsername === userUsername) ||
+      (userLicense && signerLicense === userLicense)
+    )
+  })
+
+  const canUserApprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved
+  const canUserDisapprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved
 
   // User approval (after manager approval)
   const handleUserApprove = async () => {
@@ -487,80 +533,6 @@ export default function SharePointDetailEnhanced({
       </MainLayout>
     )
   }
-
-  const isExpired = sharePoint && new Date(sharePoint.deadline) < new Date()
-  const completionPercentage = sharePoint?.completionPercentage || 0
-  const canEdit = sharePoint?.createdBy?.license === activeUser?.license || activeUser?.roles?.includes("Admin")
-  const hasManagerApproved = sharePoint?.managerApproved
-  const allApproved = sharePoint?.allUsersSigned
-  const isDisapproved = sharePoint?.status === "disapproved" || sharePoint?.status === "cancelled"
-  const isRejected = sharePoint?.status === "rejected"
-  const canRelaunch = sharePoint?.createdBy?.license === activeUser?.license && (isDisapproved || isRejected)
-
-  const isSelectedManager = sharePoint?.managersToApprove?.some((managerId) => {
-    const managerIdStr = String(managerId)
-    const userIdStr = currentUserInfo ? String(currentUserInfo._id) : String(activeUser?._id)
-    const userLicenseStr = currentUserInfo ? String(currentUserInfo.license) : String(activeUser?.license)
-    const isManager = managerIdStr === userIdStr || managerIdStr === userLicenseStr
-    if (sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved) {
-      console.log("Document needs approval:", sharePoint.title)
-      console.log("Current user info:", currentUserInfo)
-      console.log("Manager ID being checked:", managerId)
-      console.log("Manager ID (string):", managerIdStr)
-      console.log("User ID (string):", userIdStr)
-      console.log("User license (string):", userLicenseStr)
-      console.log("Is manager:", isManager)
-    }
-    return isManager
-  })
-
-  if (sharePoint?.status === "pending_approval" && !sharePoint?.managerApproved) {
-    console.log("Can manager approve:", canManagerApprove)
-    console.log("Is selected manager:", isSelectedManager)
-    console.log("Document status:", sharePoint?.status)
-    console.log("Has manager approved:", hasManagerApproved)
-  }
-
-  const canManagerApprove = isSelectedManager && sharePoint?.status === "pending_approval" && !hasManagerApproved
-
-  const currentUserLicense = currentUserInfo?.license || activeUser?.license;
-  const currentUserUsername = currentUserInfo?.username || activeUser?.username;
-  const currentUserId = currentUserInfo?._id || activeUser?._id;
-
-  const userSigner = sharePoint?.usersToSign?.find((signer) => {
-    if (!signer?.user) return false;
-    const signerId = String(signer.user._id);
-    const signerUsername = String(signer.user.username);
-    const signerLicense = String(signer.user.license);
-    const userId = String(currentUserId);
-    const userUsername = String(currentUserUsername);
-    const userLicense = String(currentUserLicense);
-
-    console.log("Checking signer:", {
-      signerId,
-      signerUsername,
-      signerLicense,
-      userId,
-      userUsername,
-      userLicense,
-    });
-
-    return (
-      (userId && signerId === userId) ||
-      (userUsername && signerUsername === userUsername) ||
-      (userLicense && signerLicense === userLicense)
-    );
-  });
-
-  const canUserApprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved;
-  const canUserDisapprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved;
-
-  console.log("User approval permissions:", {
-    hasManagerApproved,
-    userSigner: userSigner ? { username: userSigner.user.username, hasSigned: userSigner.hasSigned, hasDisapproved: userSigner.hasDisapproved } : null,
-    canUserApprove,
-    canUserDisapprove,
-  });
 
   return (
     <MainLayout>

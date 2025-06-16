@@ -32,8 +32,6 @@ import {
   ChevronsUpDown,
   Loader2,
   Shield,
-  Mail,
-  UserPlus,
 } from "lucide-react"
 import { createSharePoint } from "../apis/sharePointApi"
 import { getAllUsers } from "../apis/admin"
@@ -93,8 +91,6 @@ export default function SharePointCreateEnhanced() {
   const [errors, setErrors] = useState({})
   const [selectedUsers, setSelectedUsers] = useState([])
   const [selectedManagers, setSelectedManagers] = useState([])
-  const [externalEmails, setExternalEmails] = useState([])
-  const [newExternalEmail, setNewExternalEmail] = useState("")
   const [allUsers, setAllUsers] = useState([])
   const [managers, setManagers] = useState([])
   const [filteredUsers, setFilteredUsers] = useState([])
@@ -140,13 +136,6 @@ export default function SharePointCreateEnhanced() {
     },
     {
       id: 4,
-      title: "External Users",
-      description: "Add external users by email",
-      icon: Mail,
-      fields: ["externalEmails"],
-    },
-    {
-      id: 5,
       title: "Review & Submit",
       description: "Confirm all details",
       icon: Target,
@@ -156,19 +145,18 @@ export default function SharePointCreateEnhanced() {
 
   // Calculate form completion progress
   useEffect(() => {
-    const totalFields = 6 // title, link, deadline, managers, usersToSign, externalEmails
+    const totalFields = 4 // title, link, deadline, managers, usersToSign
     let completedFields = 0
 
     if (formData.title.trim()) completedFields++
     if (formData.link.trim()) completedFields++
     if (formData.deadline) completedFields++
     if (selectedManagers.length > 0) completedFields++
-    if (selectedUsers.length > 0 || externalEmails.length > 0) completedFields++
-    if (externalEmails.length > 0 || selectedUsers.length > 0) completedFields++
+    if (selectedUsers.length > 0) completedFields++
 
     const progress = (completedFields / totalFields) * 100
     setFormProgress(progress)
-  }, [formData, selectedUsers, selectedManagers, externalEmails])
+  }, [formData, selectedUsers, selectedManagers])
 
   useEffect(() => {
     loadAllUsers()
@@ -199,9 +187,9 @@ export default function SharePointCreateEnhanced() {
     const searchTermLower = managerSearchTerm.toLowerCase()
     const filtered = managers.filter(
       (manager) =>
-        manager.username?.toLowerCase().includes(searchTermLower) ||
-        manager.email?.toLowerCase().includes(searchTermLower) ||
-        manager.roles?.some((role) => role.toLowerCase().includes(searchTermLower)),
+        manager.username?.toLowerCase().includes(managerSearchTerm) ||
+        manager.email?.toLowerCase().includes(managerSearchTerm) ||
+        manager.roles?.some((role) => role.toLowerCase().includes(managerSearchTerm)),
     )
     setFilteredManagers(filtered)
   }, [managerSearchTerm, managers])
@@ -279,8 +267,8 @@ export default function SharePointCreateEnhanced() {
     }
 
     if (step.fields.includes("usersToSign")) {
-      if (selectedUsers.length === 0 && externalEmails.length === 0) {
-        newErrors.usersToSign = "At least one signer must be selected or external email added"
+      if (selectedUsers.length === 0) {
+        newErrors.usersToSign = "At least one signer must be selected"
       }
     }
 
@@ -319,42 +307,6 @@ export default function SharePointCreateEnhanced() {
     }
   }
 
-  const handleAddExternalEmail = () => {
-    const email = newExternalEmail.trim()
-    if (!email) return
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
-      setErrors((prev) => ({ ...prev, externalEmail: "Please enter a valid email address" }))
-      return
-    }
-
-    // Check if email already exists
-    if (externalEmails.includes(email)) {
-      setErrors((prev) => ({ ...prev, externalEmail: "This email is already added" }))
-      return
-    }
-
-    // Check if email belongs to an existing user
-    const existingUser = allUsers.find((user) => user.email.toLowerCase() === email.toLowerCase())
-    if (existingUser) {
-      setErrors((prev) => ({
-        ...prev,
-        externalEmail: "This email belongs to an existing user. Please select them from the users list instead.",
-      }))
-      return
-    }
-
-    setExternalEmails((prev) => [...prev, email])
-    setNewExternalEmail("")
-    setErrors((prev) => ({ ...prev, externalEmail: "" }))
-  }
-
-  const handleRemoveExternalEmail = (email) => {
-    setExternalEmails((prev) => prev.filter((e) => e !== email))
-  }
-
   const nextStep = () => {
     if (validateStep(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1))
@@ -367,7 +319,7 @@ export default function SharePointCreateEnhanced() {
 
   const handleSubmit = async () => {
     // Validate all steps first
-    for (let i = 0; i <= 4; i++) {
+    for (let i = 0; i <= 3; i++) {
       if (!validateStep(i)) {
         setCurrentStep(i)
         return
@@ -385,7 +337,6 @@ export default function SharePointCreateEnhanced() {
         deadline: formData.deadline,
         usersToSign: selectedUsers.map((user) => user._id),
         managersToApprove: selectedManagers.map((manager) => manager._id),
-        externalEmails: externalEmails,
       }
 
       console.log("Submitting data:", submitData)
@@ -999,126 +950,10 @@ export default function SharePointCreateEnhanced() {
                       </motion.div>
                     )}
 
-                    {/* Step 4: External Users */}
+                    {/* Step 4: Review & Submit */}
                     {currentStep === 4 && (
                       <motion.div
                         key="step-4"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-6"
-                      >
-                        <div className="space-y-2">
-                          <h2 className="text-2xl font-semibold">External Users</h2>
-                          <p className="text-muted-foreground">
-                            Add external users by email who are not registered in the system. They will receive an
-                            invitation email to register and then be able to sign the document once it's approved by
-                            managers.
-                          </p>
-                        </div>
-
-                        <div className="space-y-6">
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium">Add External Email</Label>
-                            <div className="flex gap-2">
-                              <div className="relative flex-1">
-                                <Mail className="absolute w-4 h-4 left-3 top-3 text-muted-foreground" />
-                                <Input
-                                  placeholder="Enter email address..."
-                                  value={newExternalEmail}
-                                  onChange={(e) => setNewExternalEmail(e.target.value)}
-                                  onKeyPress={(e) => e.key === "Enter" && handleAddExternalEmail()}
-                                  className={cn(
-                                    "pl-10",
-                                    errors.externalEmail && "border-destructive focus:border-destructive",
-                                  )}
-                                />
-                              </div>
-                              <Button onClick={handleAddExternalEmail} disabled={!newExternalEmail.trim()}>
-                                <UserPlus className="w-4 h-4 mr-2" />
-                                Add
-                              </Button>
-                            </div>
-                            {errors.externalEmail && (
-                              <p className="flex items-center gap-1 text-sm text-destructive">
-                                <AlertCircle className="w-3 h-3" />
-                                {errors.externalEmail}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              External users will receive an email invitation to register in the system and sign the
-                              document after manager approval
-                            </p>
-                          </div>
-
-                          {/* External Emails List */}
-                          {externalEmails.length > 0 && (
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-sm font-medium">External Users ({externalEmails.length})</Label>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setExternalEmails([])}
-                                  className="h-auto p-1 text-xs"
-                                >
-                                  Clear All
-                                </Button>
-                              </div>
-                              <div className="grid gap-2">
-                                <AnimatePresence>
-                                  {externalEmails.map((email) => (
-                                    <motion.div
-                                      key={email}
-                                      initial={{ opacity: 0, scale: 0.95 }}
-                                      animate={{ opacity: 1, scale: 1 }}
-                                      exit={{ opacity: 0, scale: 0.95 }}
-                                      className="flex items-center justify-between p-3 border rounded-lg bg-amber-50 border-amber-200"
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-100">
-                                          <Mail className="w-4 h-4 text-amber-600" />
-                                        </div>
-                                        <div>
-                                          <p className="text-sm font-medium">{email}</p>
-                                          <p className="text-xs text-muted-foreground">
-                                            External user - will receive invitation
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleRemoveExternalEmail(email)}
-                                        className="h-auto p-1"
-                                      >
-                                        <X className="w-4 h-4" />
-                                      </Button>
-                                    </motion.div>
-                                  ))}
-                                </AnimatePresence>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Summary */}
-                          <div className="p-4 border rounded-lg bg-muted">
-                            <h4 className="mb-2 text-sm font-medium">Summary</h4>
-                            <div className="space-y-1 text-sm text-muted-foreground">
-                              <p>• {selectedUsers.length} registered users selected</p>
-                              <p>• {externalEmails.length} external users added</p>
-                              <p>• Total signers: {selectedUsers.length + externalEmails.length}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {/* Step 5: Review & Submit */}
-                    {currentStep === 5 && (
-                      <motion.div
-                        key="step-5"
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -20 }}
@@ -1193,26 +1028,6 @@ export default function SharePointCreateEnhanced() {
                                   ))}
                                 </div>
                               </div>
-
-                              {externalEmails.length > 0 && (
-                                <div>
-                                  <Label className="text-sm font-medium text-muted-foreground">
-                                    External Signers ({externalEmails.length})
-                                  </Label>
-                                  <div className="flex flex-wrap gap-2 mt-2">
-                                    {externalEmails.map((email) => (
-                                      <Badge
-                                        key={email}
-                                        variant="outline"
-                                        className="text-amber-600 border-amber-200 bg-amber-50"
-                                      >
-                                        <Mail className="w-3 h-3 mr-1" />
-                                        {email}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
                             </CardContent>
                           </Card>
                         </div>
