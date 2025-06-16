@@ -49,6 +49,8 @@ import {
   RotateCcw,
   AlertTriangle,
   Copy,
+  MessageCircle,
+  Quote,
 } from "lucide-react"
 import {
   getSharePointById,
@@ -120,6 +122,7 @@ export default function SharePointDetailEnhanced({
   const [error, setError] = useState(null)
   const [approvalNote, setApprovalNote] = useState("")
   const [disapprovalNote, setDisapprovalNote] = useState("")
+  const [managerApprovalNote, setManagerApprovalNote] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showApproveDialog, setShowApproveDialog] = useState(false)
   const [showManagerApproveDialog, setShowManagerApproveDialog] = useState(false)
@@ -260,17 +263,18 @@ export default function SharePointDetailEnhanced({
     }
   }
 
-  // Manager approval
+  // Manager approval with note
   const handleManagerApprove = async () => {
     try {
       setIsSubmitting(true)
-      await approveSharePoint(documentId, true)
+      await approveSharePoint(documentId, true, managerApprovalNote)
       toast({
         title: "Document Approved by Manager",
         description: "You have approved this document. Users can now provide their approvals.",
       })
       loadSharePointDetails()
       setShowManagerApproveDialog(false)
+      setManagerApprovalNote("")
     } catch (err) {
       console.error("Error approving document:", err)
       toast({
@@ -307,11 +311,11 @@ export default function SharePointDetailEnhanced({
     }
   }
 
-  // Manager rejection
+  // Manager rejection with note
   const handleManagerReject = async () => {
     try {
       setIsSubmitting(true)
-      await approveSharePoint(documentId, false) // false = reject
+      await approveSharePoint(documentId, false, disapprovalNote) // false = reject, with note
       toast({
         title: "Document Rejected",
         description: "You have rejected this document.",
@@ -483,6 +487,118 @@ export default function SharePointDetailEnhanced({
       hour: "2-digit",
       minute: "2-digit",
     }).format(date)
+  }
+
+  // Enhanced function to get all comments from the document
+  const getAllComments = () => {
+    if (!sharePoint) return []
+
+    const comments = []
+
+    // Add creation comment if exists
+    if (sharePoint.comment) {
+      comments.push({
+        id: "creation",
+        type: "creation",
+        comment: sharePoint.comment,
+        author: sharePoint.createdBy,
+        timestamp: sharePoint.creationDate,
+        icon: <FileText className="w-4 h-4" />,
+        bgColor: "bg-blue-50",
+        borderColor: "border-blue-200",
+        textColor: "text-blue-700",
+      })
+    }
+
+    // Add all history comments
+    sharePoint.updateHistory?.forEach((entry, index) => {
+      if (entry.comment) {
+        let icon, bgColor, borderColor, textColor
+
+        switch (entry.action) {
+          case "approved":
+            icon = <Shield className="w-4 h-4" />
+            bgColor = "bg-emerald-50"
+            borderColor = "border-emerald-200"
+            textColor = "text-emerald-700"
+            break
+          case "signed":
+            icon = <CheckCircle className="w-4 h-4" />
+            bgColor = "bg-green-50"
+            borderColor = "border-green-200"
+            textColor = "text-green-700"
+            break
+          case "disapproved":
+            icon = <XCircle className="w-4 h-4" />
+            bgColor = "bg-red-50"
+            borderColor = "border-red-200"
+            textColor = "text-red-700"
+            break
+          case "rejected":
+            icon = <AlertTriangle className="w-4 h-4" />
+            bgColor = "bg-red-50"
+            borderColor = "border-red-200"
+            textColor = "text-red-700"
+            break
+          case "relaunched":
+            icon = <RotateCcw className="w-4 h-4" />
+            bgColor = "bg-blue-50"
+            borderColor = "border-blue-200"
+            textColor = "text-blue-700"
+            break
+          default:
+            icon = <MessageCircle className="w-4 h-4" />
+            bgColor = "bg-gray-50"
+            borderColor = "border-gray-200"
+            textColor = "text-gray-700"
+        }
+
+        comments.push({
+          id: `history-${index}`,
+          type: entry.action,
+          comment: entry.comment,
+          author: entry.performedBy,
+          timestamp: entry.timestamp,
+          userAction: entry.userAction,
+          icon,
+          bgColor,
+          borderColor,
+          textColor,
+        })
+      }
+    })
+
+    // Add user signature notes
+    sharePoint.usersToSign?.forEach((signer, index) => {
+      if (signer.signatureNote) {
+        comments.push({
+          id: `approval-${index}`,
+          type: "approval_note",
+          comment: signer.signatureNote,
+          author: signer.user,
+          timestamp: signer.signedAt,
+          icon: <CheckCircle className="w-4 h-4" />,
+          bgColor: "bg-green-50",
+          borderColor: "border-green-200",
+          textColor: "text-green-700",
+        })
+      }
+      if (signer.disapprovalNote) {
+        comments.push({
+          id: `disapproval-${index}`,
+          type: "disapproval_note",
+          comment: signer.disapprovalNote,
+          author: signer.user,
+          timestamp: signer.disapprovedAt,
+          icon: <XCircle className="w-4 h-4" />,
+          bgColor: "bg-red-50",
+          borderColor: "border-red-200",
+          textColor: "text-red-700",
+        })
+      }
+    })
+
+    return comments.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
   }
 
   if (loading) {
@@ -686,6 +802,18 @@ export default function SharePointDetailEnhanced({
                                   to provide their approvals.
                                 </DialogDescription>
                               </DialogHeader>
+                              <div className="mt-4 space-y-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="manager-approval-note">Manager Approval Note (optional)</Label>
+                                  <Textarea
+                                    id="manager-approval-note"
+                                    placeholder="Add any comments about your approval..."
+                                    value={managerApprovalNote}
+                                    onChange={(e) => setManagerApprovalNote(e.target.value)}
+                                    className="min-h-[100px]"
+                                  />
+                                </div>
+                              </div>
                               <DialogFooter>
                                 <Button
                                   variant="outline"
@@ -717,13 +845,14 @@ export default function SharePointDetailEnhanced({
                               </DialogHeader>
                               <div className="mt-4 space-y-4">
                                 <div className="space-y-2">
-                                  <Label htmlFor="rejection-note">Reason for Rejection (optional)</Label>
+                                  <Label htmlFor="rejection-note">Reason for Rejection *</Label>
                                   <Textarea
                                     id="rejection-note"
                                     placeholder="Explain why you are rejecting this document..."
                                     value={disapprovalNote}
                                     onChange={(e) => setDisapprovalNote(e.target.value)}
                                     className="min-h-[100px]"
+                                    required
                                   />
                                 </div>
                               </div>
@@ -735,7 +864,11 @@ export default function SharePointDetailEnhanced({
                                 >
                                   Cancel
                                 </Button>
-                                <Button variant="destructive" onClick={handleManagerReject} disabled={isSubmitting}>
+                                <Button
+                                  variant="destructive"
+                                  onClick={handleManagerReject}
+                                  disabled={isSubmitting || !disapprovalNote.trim()}
+                                >
                                   {isSubmitting ? "Rejecting..." : "Reject Document"}
                                 </Button>
                               </DialogFooter>
@@ -888,11 +1021,11 @@ export default function SharePointDetailEnhanced({
                                     <span className="text-sm font-medium text-blue-700">What happens next?</span>
                                   </div>
                                   <ul className="space-y-1 text-xs text-blue-600">
-                                    <li>â€¢ All approvals will be cleared</li>
-                                    <li>â€¢ All disapprovals will be cleared</li>
-                                    <li>â€¢ Managers will receive new approval notifications</li>
-                                    <li>â€¢ Users can approve again once re-approved by manager</li>
-                                    <li>â€¢ History will be preserved</li>
+                                    <li>• All approvals will be cleared</li>
+                                    <li>• All disapprovals will be cleared</li>
+                                    <li>• Managers will receive new approval notifications</li>
+                                    <li>• Users can approve again once re-approved by manager</li>
+                                    <li>• History will be preserved</li>
                                   </ul>
                                 </div>
                               </div>
@@ -964,7 +1097,7 @@ export default function SharePointDetailEnhanced({
               {/* Document Details */}
               <motion.div variants={cardVariants} className="space-y-6 lg:col-span-2">
                 <Tabs defaultValue="overview" className="w-full">
-                  <TabsList className="grid w-full grid-cols-5">
+                  <TabsList className="grid w-full grid-cols-6">
                     <TabsTrigger value="overview" className="flex items-center gap-1">
                       <Info className="w-3 h-3" />
                       Overview
@@ -972,6 +1105,10 @@ export default function SharePointDetailEnhanced({
                     <TabsTrigger value="approvers" className="flex items-center gap-1">
                       <Users className="w-3 h-3" />
                       Approvers
+                    </TabsTrigger>
+                    <TabsTrigger value="comments" className="flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3" />
+                      Comments
                     </TabsTrigger>
                     <TabsTrigger value="history" className="flex items-center gap-1">
                       <History className="w-3 h-3" />
@@ -1206,6 +1343,92 @@ export default function SharePointDetailEnhanced({
                     </Card>
                   </TabsContent>
 
+                  {/* Enhanced Comments Tab */}
+                  <TabsContent value="comments" className="mt-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <MessageSquare className="w-5 h-5 text-primary" />
+                          All Comments & Notes ({getAllComments().length})
+                        </CardTitle>
+                        <CardDescription>
+                          Complete timeline of all comments, notes, and feedback from all participants
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {getAllComments().length === 0 ? (
+                            <div className="py-8 text-center">
+                              <MessageSquare className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                              <h3 className="mb-2 text-lg font-medium">No Comments Yet</h3>
+                              <p className="text-muted-foreground">
+                                Comments and notes from approvals, disapprovals, and updates will appear here.
+                              </p>
+                            </div>
+                          ) : (
+                            getAllComments().map((comment, index) => (
+                              <Card key={comment.id} className={`border ${comment.borderColor} ${comment.bgColor}`}>
+                                <CardContent className="p-4">
+                                  <div className="flex items-start gap-3">
+                                    <div className={`p-2 rounded-full ${comment.bgColor}`}>{comment.icon}</div>
+                                    <div className="flex-1 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          <Avatar className="w-6 h-6">
+                                            <AvatarFallback className="text-xs">
+                                              {comment.author?.username?.charAt(0).toUpperCase() || "?"}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <span className="text-sm font-medium">
+                                            {comment.author?.username || "Unknown User"}
+                                          </span>
+                                          <Badge
+                                            variant="outline"
+                                            className={`text-xs ${comment.textColor} ${comment.borderColor} ${comment.bgColor}`}
+                                          >
+                                            {comment.type.replace("_", " ").toUpperCase()}
+                                          </Badge>
+                                        </div>
+                                        <span className="text-xs text-muted-foreground">
+                                          {formatDate(comment.timestamp)}
+                                        </span>
+                                      </div>
+                                      <div className="pl-8">
+                                        <div className="flex items-start gap-2">
+                                          <Quote className="w-4 h-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+                                          <p className="text-sm whitespace-pre-wrap">{comment.comment}</p>
+                                        </div>
+                                        {comment.userAction && (
+                                          <div className="p-2 mt-2 border rounded bg-muted/50">
+                                            <p className="text-xs text-muted-foreground">
+                                              <strong>Action:</strong> {comment.userAction.type?.replace("_", " ")}
+                                              {comment.userAction.note && (
+                                                <>
+                                                  <br />
+                                                  <strong>Note:</strong> {comment.userAction.note}
+                                                </>
+                                              )}
+                                              {comment.userAction.reason && (
+                                                <>
+                                                  <br />
+                                                  <strong>Reason:</strong> {comment.userAction.reason}
+                                                </>
+                                              )}
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
                   {/* History Tab */}
                   <TabsContent value="history" className="mt-6">
                     <Card>
@@ -1259,6 +1482,34 @@ export default function SharePointDetailEnhanced({
                                   <p className="text-sm text-muted-foreground">
                                     {event.performedBy?.username || "Unknown user"} - {event.details}
                                   </p>
+                                  {event.comment && (
+                                    <div className="p-3 mt-2 border rounded-lg bg-muted/50">
+                                      <div className="flex items-start gap-2">
+                                        <MessageSquare className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                                        <div>
+                                          <p className="mb-1 text-xs font-medium text-muted-foreground">Comment:</p>
+                                          <p className="text-sm">{event.comment}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {event.userAction && (
+                                    <div className="p-2 mt-2 border rounded bg-muted/30">
+                                      <p className="text-xs text-muted-foreground">
+                                        <strong>Action Type:</strong> {event.userAction.type?.replace("_", " ")}
+                                        {event.userAction.previousDisapprovals &&
+                                          event.userAction.previousDisapprovals.length > 0 && (
+                                            <>
+                                              <br />
+                                              <strong>Previous Issues:</strong>{" "}
+                                              {event.userAction.previousDisapprovals
+                                                .map((d) => `${d.username}: ${d.reason}`)
+                                                .join("; ")}
+                                            </>
+                                          )}
+                                      </p>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1304,6 +1555,10 @@ export default function SharePointDetailEnhanced({
                                 <TableRow>
                                   <TableCell className="font-medium">Version</TableCell>
                                   <TableCell>{sharePoint.__v || 0}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="font-medium">Total Comments</TableCell>
+                                  <TableCell>{getAllComments().length}</TableCell>
                                 </TableRow>
                               </TableBody>
                             </Table>
@@ -1406,51 +1661,43 @@ export default function SharePointDetailEnhanced({
                       Timeline
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4">
-                      <div className="space-y-1">
-                        <p className="text-sm text-muted-foreground">Created</p>
-                        <p className="font-medium">{formatDate(sharePoint.creationDate)}</p>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Created</span>
+                        <span className="font-medium">{formatDate(sharePoint.creationDate)}</span>
                       </div>
-                      <div className="space-y-1">
-                        <p className="text-sm text-muted-foreground">Last Updated</p>
-                        <p className="font-medium">{formatDate(sharePoint.updatedAt)}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-sm text-muted-foreground">Deadline</p>
-                        <p className={`font-medium ${isExpired ? "text-red-600" : ""}`}>
+                      <Separator />
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Deadline</span>
+                        <span className={`font-medium ${isExpired ? "text-red-600" : "text-foreground"}`}>
                           {formatDate(sharePoint.deadline)}
-                        </p>
+                        </span>
                       </div>
-                      {sharePoint.approvedAt && (
-                        <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Approved</p>
-                          <p className="font-medium text-emerald-600">{formatDate(sharePoint.approvedAt)}</p>
-                        </div>
+                      {hasManagerApproved && (
+                        <>
+                          <Separator />
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Manager Approved</span>
+                            <span className="font-medium">{formatDate(sharePoint.approvedAt)}</span>
+                          </div>
+                        </>
                       )}
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Status</p>
-                      <div className="flex items-center gap-2">
-                        <Badge className={getStatusColor(sharePoint.status)} variant="outline">
-                          {getStatusIcon(sharePoint.status)}
-                          <span className="ml-1">{sharePoint.status.replace("_", " ").toUpperCase()}</span>
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Completion</p>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>Progress</span>
-                          <span className="font-medium">{completionPercentage}%</span>
-                        </div>
-                        <Progress value={completionPercentage} className="h-2" />
-                      </div>
+                      {allApproved && (
+                        <>
+                          <Separator />
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Completed</span>
+                            <span className="font-medium text-emerald-600">
+                              {formatDate(
+                                sharePoint.usersToSign
+                                  ?.filter((u) => u.hasSigned)
+                                  .sort((a, b) => new Date(b.signedAt) - new Date(a.signedAt))[0]?.signedAt,
+                              )}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -1463,10 +1710,11 @@ export default function SharePointDetailEnhanced({
                       Quick Actions
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="space-y-2">
                     <Button
                       variant="outline"
                       size="sm"
+                      className="w-full"
                       onClick={() => {
                         navigator.clipboard.writeText(sharePoint.link)
                         toast({
@@ -1474,56 +1722,31 @@ export default function SharePointDetailEnhanced({
                           description: "SharePoint link has been copied to clipboard.",
                         })
                       }}
-                      className="w-full"
                     >
                       <Copy className="w-4 h-4 mr-2" />
-                      Copy Link
+                      Copy SharePoint Link
                     </Button>
-                    {canEdit && (
-                      <Button variant="outline" size="sm" onClick={handleEdit} className="w-full">
-                        <Edit className="w-4 h-4 mr-2" />
-                        Edit Document
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={() => window.print()} className="w-full">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        navigator.clipboard.writeText(sharePoint._id)
+                        toast({
+                          title: "ID Copied",
+                          description: "Document ID has been copied to clipboard.",
+                        })
+                      }}
+                    >
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Document ID
+                    </Button>
+                    <Button variant="outline" size="sm" className="w-full" onClick={handlePrintHistoryAsPDF}>
                       <Download className="w-4 h-4 mr-2" />
-                      Print Details
+                      Export History
                     </Button>
                   </CardContent>
                 </Card>
-
-                {/* Approval Status */}
-                {sharePoint.approvedBy && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Shield className="w-5 h-5 text-emerald-600" />
-                        Approval
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="p-4 border rounded-lg border-emerald-200 bg-emerald-50">
-                          <div className="flex items-center gap-2 mb-2">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                            <p className="font-medium">Approved</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Avatar className="w-8 h-8">
-                              <AvatarFallback>
-                                {sharePoint.approvedBy.username?.charAt(0).toUpperCase() || "?"}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="text-sm font-medium">{sharePoint.approvedBy.username}</p>
-                              <p className="text-xs text-muted-foreground">{formatDate(sharePoint.approvedAt)}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
               </motion.div>
             </div>
           </motion.div>

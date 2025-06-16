@@ -349,7 +349,15 @@ export default function SharePointShow() {
 
     const canSign =
       sharePoint?.managerApproved &&
-      sharePoint?.usersToSign?.some((signer) => signer.user?._id === currentUser?._id && !signer.hasSigned)
+      sharePoint?.usersToSign?.some((signer) => {
+        if (!signer.user?._id) return false
+        const isAssignedUser = signer.user._id === currentUser?._id
+        return isAssignedUser && !signer.hasSigned && !signer.hasDisapproved
+      })
+
+    const userSigner = sharePoint?.usersToSign?.find((signer) => signer.user?._id === currentUser?._id)
+    const hasUserSigned = userSigner?.hasSigned || false
+    const hasUserDisapproved = userSigner?.hasDisapproved || false
 
     return (
       <motion.div variants={cardVariants} whileHover="hover" layout>
@@ -411,6 +419,18 @@ export default function SharePointShow() {
                 <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-200 bg-emerald-50">
                   <Shield className="w-3 h-3 mr-1" />
                   Approved
+                </Badge>
+              )}
+              {sharePoint?.status === "disapproved" && (
+                <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50">
+                  <XCircle className="w-3 h-3 mr-1" />
+                  Disapproved
+                </Badge>
+              )}
+              {sharePoint?.status === "rejected" && (
+                <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50">
+                  <XCircle className="w-3 h-3 mr-1" />
+                  Rejected
                 </Badge>
               )}
             </div>
@@ -537,16 +557,30 @@ export default function SharePointShow() {
                 </div>
               )}
 
-              {canSign && (
-                <Button
-                  size="sm"
-                  onClick={() => handleQuickSign(sharePoint._id)}
-                  disabled={isSubmitting}
-                  className="w-full"
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  {isSubmitting ? "Signing..." : "Quick Sign"}
-                </Button>
+              {sharePoint?.managerApproved && userSigner && (
+                <>
+                  {hasUserSigned ? (
+                    <Badge variant="outline" className="w-full text-emerald-600 border-emerald-200 bg-emerald-50">
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      You have signed
+                    </Badge>
+                  ) : hasUserDisapproved ? (
+                    <Badge variant="outline" className="w-full text-red-600 border-red-200 bg-red-50">
+                      <XCircle className="w-4 h-4 mr-2" />
+                      You disapproved
+                    </Badge>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={() => handleQuickSign(sharePoint._id)}
+                      disabled={isSubmitting}
+                      className="w-full"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      {isSubmitting ? "Signing..." : "Quick Sign"}
+                    </Button>
+                  )}
+                </>
               )}
 
               <div className="flex gap-2">
@@ -589,7 +623,15 @@ export default function SharePointShow() {
       !sharePoint?.managerApproved
     const canSign =
       sharePoint?.managerApproved &&
-      sharePoint?.usersToSign?.some((signer) => signer.user?._id === currentUser?._id && !signer.hasSigned)
+      sharePoint?.usersToSign?.some((signer) => {
+        if (!signer.user?._id) return false
+        const isAssignedUser = signer.user._id === currentUser?._id
+        return isAssignedUser && !signer.hasSigned && !signer.hasDisapproved
+      })
+
+    const userSigner = sharePoint?.usersToSign?.find((signer) => signer.user?._id === currentUser?._id)
+    const hasUserSigned = userSigner?.hasSigned || false
+    const hasUserDisapproved = userSigner?.hasDisapproved || false
 
     return (
       <motion.div variants={itemVariants}>
@@ -615,6 +657,18 @@ export default function SharePointShow() {
                       <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-200 bg-emerald-50">
                         <Shield className="w-3 h-3 mr-1" />
                         Approved
+                      </Badge>
+                    )}
+                    {sharePoint?.status === "disapproved" && (
+                      <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50">
+                        <XCircle className="w-3 h-3 mr-1" />
+                        Disapproved
+                      </Badge>
+                    )}
+                    {sharePoint?.status === "rejected" && (
+                      <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50">
+                        <XCircle className="w-3 h-3 mr-1" />
+                        Rejected
                       </Badge>
                     )}
                   </div>
@@ -697,11 +751,25 @@ export default function SharePointShow() {
                     </>
                   )}
 
-                  {canSign && (
-                    <Button size="sm" onClick={() => handleQuickSign(sharePoint._id)} disabled={isSubmitting}>
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      {isSubmitting ? "Signing..." : "Sign"}
-                    </Button>
+                  {sharePoint?.managerApproved && userSigner && (
+                    <>
+                      {hasUserSigned ? (
+                        <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          You have signed
+                        </Badge>
+                      ) : hasUserDisapproved ? (
+                        <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50">
+                          <XCircle className="w-4 h-4 mr-2" />
+                          You disapproved
+                        </Badge>
+                      ) : (
+                        <Button size="sm" onClick={() => handleQuickSign(sharePoint._id)} disabled={isSubmitting}>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          {isSubmitting ? "Signing..." : "Sign"}
+                        </Button>
+                      )}
+                    </>
                   )}
 
                   <Button variant="outline" size="sm" onClick={() => handleViewDetail(sharePoint._id)}>

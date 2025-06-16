@@ -116,6 +116,7 @@ const sharePointSchema = new mongoose.Schema(
       maxlength: 1000,
     },
 
+    // Enhanced update history with better comment tracking
     updateHistory: [
       {
         action: {
@@ -145,8 +146,44 @@ const sharePointSchema = new mongoose.Schema(
           type: String,
           trim: true,
         },
+        // Enhanced: Add comment field to track all user comments/notes
+        comment: {
+          type: String,
+          trim: true,
+          maxlength: 1000,
+        },
         previousValues: {
           type: mongoose.Schema.Types.Mixed,
+        },
+        // Enhanced: Add structured user action data
+        userAction: {
+          type: {
+            type: String,
+            enum: [
+              "approval",
+              "disapproval",
+              "manager_approval",
+              "manager_rejection",
+              "update",
+              "relaunch",
+              "creation",
+            ],
+          },
+          userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+          },
+          username: String,
+          timestamp: Date,
+          note: String,
+          reason: String,
+          previousDisapprovals: [
+            {
+              username: String,
+              reason: String,
+              timestamp: Date,
+            },
+          ],
         },
       },
     ],
@@ -200,6 +237,56 @@ sharePointSchema.virtual("completionPercentage").get(function () {
   return Math.round((signedCount / this.usersToSign.length) * 100)
 })
 
+// Enhanced: Virtual to get all comments from history
+sharePointSchema.virtual("allComments").get(function () {
+  const comments = []
+
+  // Add creation comment if exists
+  if (this.comment) {
+    comments.push({
+      type: "creation",
+      comment: this.comment,
+      author: this.createdBy,
+      timestamp: this.creationDate,
+    })
+  }
+
+  // Add all history comments
+  this.updateHistory.forEach((entry) => {
+    if (entry.comment) {
+      comments.push({
+        type: entry.action,
+        comment: entry.comment,
+        author: entry.performedBy,
+        timestamp: entry.timestamp,
+        userAction: entry.userAction,
+      })
+    }
+  })
+
+  // Add user signature notes
+  this.usersToSign.forEach((signer) => {
+    if (signer.signatureNote) {
+      comments.push({
+        type: "approval_note",
+        comment: signer.signatureNote,
+        author: signer.user,
+        timestamp: signer.signedAt,
+      })
+    }
+    if (signer.disapprovalNote) {
+      comments.push({
+        type: "disapproval_note",
+        comment: signer.disapprovalNote,
+        author: signer.user,
+        timestamp: signer.disapprovedAt,
+      })
+    }
+  })
+
+  return comments.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+})
+
 // Enhanced pre-save middleware to handle the new workflow with disapprovals
 sharePointSchema.pre("save", function (next) {
   // Check for disapprovals first
@@ -234,5 +321,7 @@ sharePointSchema.index({ "usersToSign.user": 1 })
 sharePointSchema.index({ "usersToSign.externalEmail": 1 })
 sharePointSchema.index({ managersToApprove: 1 })
 sharePointSchema.index({ managerApproved: 1 })
+sharePointSchema.index({ "updateHistory.timestamp": -1 })
+sharePointSchema.index({ "updateHistory.performedBy": 1 })
 
 module.exports = mongoose.model("SharePoint", sharePointSchema)

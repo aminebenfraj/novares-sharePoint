@@ -164,6 +164,8 @@ exports.createSharePoint = async (req, res) => {
           action: "created",
           performedBy: req.user._id,
           details: `SharePoint created with title: ${title}. Waiting for manager approval.`,
+          // Enhanced: Add creation comment to history
+          comment: comment || null,
         },
       ],
     })
@@ -251,7 +253,7 @@ exports.createSharePoint = async (req, res) => {
   }
 }
 
-// Get all SharePoints with enhanced pagination
+// Get all SharePoints with enhanced pagination - MODIFIED to show all documents to everyone
 exports.getAllSharePoints = async (req, res) => {
   try {
     const {
@@ -278,17 +280,18 @@ exports.getAllSharePoints = async (req, res) => {
       filter.$or = [{ title: { $regex: search, $options: "i" } }, { comment: { $regex: search, $options: "i" } }]
     }
 
-    // For non-admin users, only show SharePoints they created, are assigned to, or are assigned to approve
-    if (!req.user.roles.includes("Admin")) {
-      const userFilter = {
-        $or: [
-          { createdBy: req.user._id },
-          { "usersToSign.user": req.user._id },
-          { managersToApprove: req.user._id }, // Include documents where user is in managersToApprove
-        ],
-      }
-      filter.$and = filter.$and ? [...filter.$and, userFilter] : [userFilter]
-    }
+    // REMOVED: Permission filtering - now everyone can see all documents
+    // The original code had this filter that restricted visibility:
+    // if (!req.user.roles.includes("Admin")) {
+    //   const userFilter = {
+    //     $or: [
+    //       { createdBy: req.user._id },
+    //       { "usersToSign.user": req.user._id },
+    //       { managersToApprove: req.user._id },
+    //     ],
+    //   }
+    //   filter.$and = filter.$and ? [...filter.$and, userFilter] : [userFilter]
+    // }
 
     // Set up sorting
     sort[sortBy] = sortOrder === "desc" ? -1 : 1
@@ -336,7 +339,7 @@ exports.getAllSharePoints = async (req, res) => {
   }
 }
 
-// Get SharePoint by ID
+// Get SharePoint by ID - MODIFIED to allow everyone to view any document
 exports.getSharePointById = async (req, res) => {
   try {
     if (!req.user || !req.user.roles) {
@@ -354,16 +357,17 @@ exports.getSharePointById = async (req, res) => {
       return res.status(404).json({ error: "SharePoint not found" })
     }
 
-    // Check if user is admin, creator, signer, or assigned manager
-    const canView =
-      req.user.roles.includes("Admin") ||
-      sharePoint.createdBy._id.toString() === req.user._id.toString() ||
-      sharePoint.usersToSign.some((signer) => signer.user && signer.user._id.toString() === req.user._id.toString()) ||
-      sharePoint.managersToApprove.some((managerId) => managerId.toString() === req.user._id.toString())
-
-    if (!canView) {
-      return res.status(403).json({ error: "You don't have permission to view this SharePoint" })
-    }
+    // REMOVED: Permission check - now everyone can view any document
+    // The original code had this check that restricted access:
+    // const canView =
+    //   req.user.roles.includes("Admin") ||
+    //   sharePoint.createdBy._id.toString() === req.user._id.toString() ||
+    //   sharePoint.usersToSign.some((signer) => signer.user && signer.user._id.toString() === req.user._id.toString()) ||
+    //   sharePoint.managersToApprove.some((managerId) => managerId.toString() === req.user._id.toString())
+    //
+    // if (!canView) {
+    //   return res.status(403).json({ error: "You don't have permission to view this SharePoint" })
+    // }
 
     // Calculate completion data
     const completionData = calculateCompletionData(sharePoint)
@@ -379,7 +383,7 @@ exports.getSharePointById = async (req, res) => {
   }
 }
 
-// Sign SharePoint - UPDATED with completion email notifications
+// Sign SharePoint - UPDATED with completion email notifications and enhanced comment tracking
 exports.signSharePoint = async (req, res) => {
   try {
     const { signatureNote } = req.body
@@ -424,11 +428,18 @@ exports.signSharePoint = async (req, res) => {
     const completionData = calculateCompletionData(sharePoint)
     sharePoint.status = completionData.status
 
-    // Add to history
+    // Enhanced: Add detailed approval to history with comment
     sharePoint.updateHistory.push({
       action: "signed",
       performedBy: req.user._id,
-      details: signatureNote ? `Signed with note: ${signatureNote}` : "Signed",
+      details: `Document approved by ${req.user.username}${signatureNote ? ` with note: ${signatureNote}` : ""}`,
+      comment: signatureNote || null,
+      userAction: {
+        type: "approval",
+        userId: req.user._id,
+        username: req.user.username,
+        timestamp: new Date(),
+      },
     })
 
     await sharePoint.save()
@@ -621,13 +632,20 @@ exports.updateSharePoint = async (req, res) => {
       updateData.usersToSign = usersToSign.map((userId) => ({ user: userId }))
     }
 
-    // Add to update history
+    // Enhanced: Add update to history with comment tracking
     updateData.$push = {
       updateHistory: {
         action: "updated",
         performedBy: req.user._id,
-        details: `SharePoint updated`,
+        details: `SharePoint updated by ${req.user.username}`,
+        comment: comment || null,
         previousValues,
+        userAction: {
+          type: "update",
+          userId: req.user._id,
+          username: req.user.username,
+          timestamp: new Date(),
+        },
       },
     }
 
@@ -656,6 +674,8 @@ exports.updateSharePoint = async (req, res) => {
     res.status(500).json({ error: "Error updating SharePoint" })
   }
 }
+
+// Enhanced disapprove function with better comment tracking
 exports.disapproveSharePoint = async (req, res) => {
   try {
     const { disapprovalNote } = req.body
@@ -707,11 +727,19 @@ exports.disapproveSharePoint = async (req, res) => {
     sharePoint.status = "disapproved"
     sharePoint.disapprovalNote = disapprovalNote.trim()
 
-    // Add to history
+    // Enhanced: Add detailed disapproval to history with full comment tracking
     sharePoint.updateHistory.push({
       action: "disapproved",
       performedBy: req.user._id,
-      details: `Document disapproved with note: ${disapprovalNote.trim()}`,
+      details: `Document disapproved by ${req.user.username}: ${disapprovalNote.trim()}`,
+      comment: disapprovalNote.trim(),
+      userAction: {
+        type: "disapproval",
+        userId: req.user._id,
+        username: req.user.username,
+        timestamp: new Date(),
+        reason: disapprovalNote.trim(),
+      },
     })
 
     await sharePoint.save()
@@ -752,33 +780,43 @@ exports.disapproveSharePoint = async (req, res) => {
   }
 }
 
+// Enhanced relaunch function with better history tracking
 exports.relaunchSharePoint = async (req, res) => {
   try {
     const sharePoint = await SharePoint.findById(req.params.id)
       .populate("createdBy", "username email roles")
       .populate("managersToApprove", "username email roles")
-      .populate("usersToSign.user", "username email roles");
+      .populate("usersToSign.user", "username email roles")
 
     if (!sharePoint) {
-      return res.status(404).json({ error: "SharePoint not found" });
+      return res.status(404).json({ error: "SharePoint not found" })
     }
 
     // Check if user is the creator
     if (sharePoint.createdBy._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ error: "Only the document creator can relaunch the document" });
+      return res.status(403).json({ error: "Only the document creator can relaunch the document" })
     }
 
     // Check if document is disapproved
     if (sharePoint.status !== "disapproved") {
-      return res.status(400).json({ error: "Only disapproved documents can be relaunched" });
+      return res.status(400).json({ error: "Only disapproved documents can be relaunched" })
     }
 
+    // Store previous disapproval information for history
+    const previousDisapprovals = sharePoint.usersToSign
+      .filter((signer) => signer.hasDisapproved)
+      .map((signer) => ({
+        username: signer.user?.username,
+        reason: signer.disapprovalNote,
+        timestamp: signer.disapprovedAt,
+      }))
+
     // Reset document status and approvals
-    sharePoint.status = "pending_approval";
-    sharePoint.managerApproved = false;
-    sharePoint.approvedBy = null;
-    sharePoint.approvedAt = null;
-    sharePoint.disapprovalNote = null;
+    sharePoint.status = "pending_approval"
+    sharePoint.managerApproved = false
+    sharePoint.approvedBy = null
+    sharePoint.approvedAt = null
+    sharePoint.disapprovalNote = null
 
     // Reset user disapprovals (preserve approvals as per current logic)
     const resetSigners = sharePoint.usersToSign.map((signer) => ({
@@ -787,24 +825,35 @@ exports.relaunchSharePoint = async (req, res) => {
       disapprovedAt: null,
       disapprovalNote: null,
       // Do NOT reset: hasSigned, signedAt, signatureNote
-    }));
-    sharePoint.usersToSign = resetSigners;
+    }))
+    sharePoint.usersToSign = resetSigners
 
     // Log the reset state for debugging
-    console.log("Relaunched SharePoint signers:", sharePoint.usersToSign.map(s => ({
-      user: s.user?.username || s.externalEmail,
-      hasSigned: s.hasSigned,
-      hasDisapproved: s.hasDisapproved,
-    })));
+    console.log(
+      "Relaunched SharePoint signers:",
+      sharePoint.usersToSign.map((s) => ({
+        user: s.user?.username || s.externalEmail,
+        hasSigned: s.hasSigned,
+        hasDisapproved: s.hasDisapproved,
+      })),
+    )
 
-    // Add to history
+    // Enhanced: Add detailed relaunch to history with previous disapproval context
     sharePoint.updateHistory.push({
       action: "relaunched",
       performedBy: req.user._id,
-      details: "Document relaunched for re-approval after disapproval. Existing user approvals preserved, disapprovals reset, manager approval reset.",
-    });
+      details: `Document relaunched by ${req.user.username} after disapproval. Previous disapprovals: ${previousDisapprovals.map((d) => `${d.username}: ${d.reason}`).join("; ")}`,
+      comment: `Relaunched to address previous concerns: ${previousDisapprovals.map((d) => d.reason).join("; ")}`,
+      userAction: {
+        type: "relaunch",
+        userId: req.user._id,
+        username: req.user.username,
+        timestamp: new Date(),
+        previousDisapprovals: previousDisapprovals,
+      },
+    })
 
-    await sharePoint.save();
+    await sharePoint.save()
 
     // Send notification to managers for re-approval
     try {
@@ -817,35 +866,36 @@ exports.relaunchSharePoint = async (req, res) => {
           createdBy: req.user.username,
           requiresApproval: true,
           isRelaunch: true,
-        })
-      );
-      await Promise.allSettled(managerEmailPromises);
-      console.log("Manager re-approval notifications sent successfully");
+        }),
+      )
+      await Promise.allSettled(managerEmailPromises)
+      console.log("Manager re-approval notifications sent successfully")
     } catch (emailError) {
-      console.error("Failed to send relaunch notifications:", emailError);
+      console.error("Failed to send relaunch notifications:", emailError)
     }
 
     await sharePoint.populate([
       { path: "createdBy", select: "username email roles" },
       { path: "usersToSign.user", select: "username email roles" },
-    ]);
+    ])
 
     // Calculate completion data
-    const completionData = calculateCompletionData(sharePoint);
+    const completionData = calculateCompletionData(sharePoint)
     const responseData = {
       ...sharePoint.toObject(),
       ...completionData,
-    };
+    }
 
     res.json({
-      message: "SharePoint relaunched successfully. Managers have been notified for re-approval. User disapprovals have been reset, and existing approvals preserved.",
+      message:
+        "SharePoint relaunched successfully. Managers have been notified for re-approval. User disapprovals have been reset, and existing approvals preserved.",
       sharePoint: responseData,
-    });
+    })
   } catch (error) {
-    console.error("Error relaunching SharePoint:", error);
-    res.status(500).json({ error: "Error relaunching SharePoint" });
+    console.error("Error relaunching SharePoint:", error)
+    res.status(500).json({ error: "Error relaunching SharePoint" })
   }
-};
+}
 
 // Send notification to document creator when document is disapproved
 const sendSharePointRelaunchEmail = async ({
@@ -881,6 +931,7 @@ const sendSharePointRelaunchEmail = async ({
     throw error
   }
 }
+
 // Delete SharePoint
 exports.deleteSharePoint = async (req, res) => {
   try {
@@ -904,10 +955,10 @@ exports.deleteSharePoint = async (req, res) => {
   }
 }
 
-// Approve SharePoint (Manager only) - ENHANCED with email notifications
+// Enhanced approve SharePoint (Manager only) with better comment tracking
 exports.approveSharePoint = async (req, res) => {
   try {
-    const { approved } = req.body
+    const { approved, approvalNote } = req.body // Added approvalNote parameter
     const sharePoint = await SharePoint.findById(req.params.id)
       .populate("createdBy", "username email roles")
       .populate("usersToSign.user", "username email roles")
@@ -951,13 +1002,21 @@ exports.approveSharePoint = async (req, res) => {
       sharePoint.status = "rejected"
     }
 
-    // Add to history
+    // Enhanced: Add detailed manager action to history with comment
     sharePoint.updateHistory.push({
       action: approved ? "approved" : "rejected",
       performedBy: req.user._id,
       details: approved
-        ? "SharePoint approved by manager. Users can now sign the document."
-        : "SharePoint rejected by manager",
+        ? `Document approved by manager ${req.user.username}. Users can now sign the document.${approvalNote ? ` Manager note: ${approvalNote}` : ""}`
+        : `Document rejected by manager ${req.user.username}${approvalNote ? ` with reason: ${approvalNote}` : ""}`,
+      comment: approvalNote || null,
+      userAction: {
+        type: approved ? "manager_approval" : "manager_rejection",
+        userId: req.user._id,
+        username: req.user.username,
+        timestamp: new Date(),
+        note: approvalNote || null,
+      },
     })
 
     await sharePoint.save()
