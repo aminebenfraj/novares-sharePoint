@@ -28,7 +28,6 @@ import {
   Calendar,
   Clock,
   Users,
-  ExternalLink,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -49,6 +48,7 @@ import {
   Settings,
   RotateCcw,
   AlertTriangle,
+  Copy,
 } from "lucide-react"
 import {
   getSharePointById,
@@ -1001,16 +1001,20 @@ export default function SharePointDetailEnhanced({
                           <div className="space-y-4">
                             <div>
                               <h3 className="mb-2 text-sm font-medium text-muted-foreground">SharePoint Link</h3>
-                              <Button variant="outline" size="sm" asChild className="w-full">
-                                <a
-                                  href={sharePoint.link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-2"
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                  Open Document
-                                </a>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(sharePoint.link)
+                                  toast({
+                                    title: "Link Copied",
+                                    description: "SharePoint link has been copied to clipboard.",
+                                  })
+                                }}
+                                className="w-full"
+                              >
+                                <Copy className="w-4 h-4 mr-2" />
+                                Copy Link
                               </Button>
                             </div>
 
@@ -1460,16 +1464,20 @@ export default function SharePointDetailEnhanced({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <Button variant="outline" size="sm" asChild className="w-full">
-                      <a
-                        href={sharePoint.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        Open Document
-                      </a>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(sharePoint.link)
+                        toast({
+                          title: "Link Copied",
+                          description: "SharePoint link has been copied to clipboard.",
+                        })
+                      }}
+                      className="w-full"
+                    >
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Link
                     </Button>
                     {canEdit && (
                       <Button variant="outline" size="sm" onClick={handleEdit} className="w-full">
