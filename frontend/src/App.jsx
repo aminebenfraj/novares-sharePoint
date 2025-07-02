@@ -26,6 +26,7 @@ import SettingsPage from "./pages/user/settings-page"
 function App() {
   const adminRoles = ["Admin"]
   const productionRoles = [
+    "User",
     "Manager",
     "Admin",
     "PRODUCCION",
