@@ -780,7 +780,7 @@ exports.disapproveSharePoint = async (req, res) => {
   }
 }
 
-// Enhanced relaunch function with better history tracking
+// ENHANCED: Relaunch function now supports both user disapprovals AND manager rejections
 exports.relaunchSharePoint = async (req, res) => {
   try {
     const sharePoint = await SharePoint.findById(req.params.id)
@@ -797,19 +797,45 @@ exports.relaunchSharePoint = async (req, res) => {
       return res.status(403).json({ error: "Only the document creator can relaunch the document" })
     }
 
-    // Check if document is disapproved
-    if (sharePoint.status !== "disapproved") {
-      return res.status(400).json({ error: "Only disapproved documents can be relaunched" })
+    // UPDATED: Check if document is disapproved OR rejected (manager rejection)
+    if (sharePoint.status !== "disapproved" && sharePoint.status !== "rejected") {
+      return res.status(400).json({ 
+        error: "Only disapproved or rejected documents can be relaunched",
+        currentStatus: sharePoint.status 
+      })
     }
 
-    // Store previous disapproval information for history
+    // Store previous rejection/disapproval information for history
+    let previousIssues = []
+    
+    // Handle user disapprovals
     const previousDisapprovals = sharePoint.usersToSign
       .filter((signer) => signer.hasDisapproved)
       .map((signer) => ({
+        type: "user_disapproval",
         username: signer.user?.username,
         reason: signer.disapprovalNote,
         timestamp: signer.disapprovedAt,
       }))
+    
+    // Handle manager rejection
+    if (sharePoint.status === "rejected") {
+      // Find the rejection details from update history
+      const rejectionHistory = sharePoint.updateHistory
+        .filter(entry => entry.action === "rejected")
+        .pop() // Get the most recent rejection
+      
+      if (rejectionHistory) {
+        previousIssues.push({
+          type: "manager_rejection",
+          username: rejectionHistory.userAction?.username || "Manager",
+          reason: rejectionHistory.comment || "No reason provided",
+          timestamp: rejectionHistory.timestamp || rejectionHistory.createdAt,
+        })
+      }
+    }
+    
+    previousIssues = [...previousIssues, ...previousDisapprovals]
 
     // Reset document status and approvals
     sharePoint.status = "pending_approval"
@@ -838,18 +864,23 @@ exports.relaunchSharePoint = async (req, res) => {
       })),
     )
 
-    // Enhanced: Add detailed relaunch to history with previous disapproval context
+    // ENHANCED: Add detailed relaunch to history with both rejection types
+    const issuesSummary = previousIssues.map((issue) => 
+      `${issue.username} (${issue.type}): ${issue.reason}`
+    ).join("; ")
+
     sharePoint.updateHistory.push({
       action: "relaunched",
       performedBy: req.user._id,
-      details: `Document relaunched by ${req.user.username} after disapproval. Previous disapprovals: ${previousDisapprovals.map((d) => `${d.username}: ${d.reason}`).join("; ")}`,
-      comment: `Relaunched to address previous concerns: ${previousDisapprovals.map((d) => d.reason).join("; ")}`,
+      details: `Document relaunched by ${req.user.username} after ${sharePoint.status === "rejected" ? "manager rejection" : "user disapproval"}. Previous issues: ${issuesSummary}`,
+      comment: `Relaunched to address previous concerns: ${previousIssues.map((issue) => issue.reason).join("; ")}`,
       userAction: {
         type: "relaunch",
         userId: req.user._id,
         username: req.user.username,
         timestamp: new Date(),
-        previousDisapprovals: previousDisapprovals,
+        previousIssues: previousIssues,
+        relaunchReason: sharePoint.status === "rejected" ? "manager_rejection" : "user_disapproval",
       },
     })
 
@@ -866,6 +897,7 @@ exports.relaunchSharePoint = async (req, res) => {
           createdBy: req.user.username,
           requiresApproval: true,
           isRelaunch: true,
+          relaunchReason: sharePoint.status === "rejected" ? "manager rejection" : "user disapproval",
         }),
       )
       await Promise.allSettled(managerEmailPromises)
@@ -887,9 +919,10 @@ exports.relaunchSharePoint = async (req, res) => {
     }
 
     res.json({
-      message:
-        "SharePoint relaunched successfully. Managers have been notified for re-approval. User disapprovals have been reset, and existing approvals preserved.",
+      message: `SharePoint relaunched successfully after ${sharePoint.status === "rejected" ? "manager rejection" : "user disapproval"}. Managers have been notified for re-approval. User disapprovals have been reset, and existing approvals preserved.`,
       sharePoint: responseData,
+      relaunchReason: sharePoint.status === "rejected" ? "manager_rejection" : "user_disapproval",
+      previousIssuesCount: previousIssues.length,
     })
   } catch (error) {
     console.error("Error relaunching SharePoint:", error)
@@ -999,7 +1032,7 @@ exports.approveSharePoint = async (req, res) => {
     if (approved) {
       sharePoint.status = "pending" // Ready for signing
     } else {
-      sharePoint.status = "rejected"
+      sharePoint.status = "rejected" // UPDATED: Use "rejected" for manager rejections
     }
 
     // Enhanced: Add detailed manager action to history with comment
@@ -1042,6 +1075,21 @@ exports.approveSharePoint = async (req, res) => {
       } catch (emailError) {
         console.error("❌ Failed to send approval notifications:", emailError)
       }
+    } else {
+      // ENHANCED: Send rejection notification to document creator
+      try {
+        await sendManagerRejectionEmail({
+          to: sharePoint.createdBy.email,
+          username: sharePoint.createdBy.username,
+          documentTitle: sharePoint.title,
+          documentId: sharePoint._id.toString(),
+          rejectedBy: req.user.username,
+          rejectionNote: approvalNote || "No reason provided",
+        })
+        console.log(`📧 Rejection notification sent to document creator`)
+      } catch (emailError) {
+        console.error("❌ Failed to send rejection notification:", emailError)
+      }
     }
 
     await sharePoint.populate([
@@ -1058,12 +1106,46 @@ exports.approveSharePoint = async (req, res) => {
     }
 
     res.json({
-      message: `SharePoint ${approved ? "approved" : "rejected"} successfully${approved ? ". Approval notifications sent to assigned users." : ""}`,
+      message: `SharePoint ${approved ? "approved" : "rejected"} successfully${approved ? ". Approval notifications sent to assigned users." : ". Creator has been notified and can relaunch the document."}`,
       sharePoint: responseData,
     })
   } catch (error) {
     console.error("Error approving SharePoint:", error)
     res.status(500).json({ error: "Error approving SharePoint" })
+  }
+}
+
+// NEW: Send notification to document creator when document is rejected by manager
+const sendManagerRejectionEmail = async ({
+  to,
+  username,
+  documentTitle,
+  documentId,
+  rejectedBy,
+  rejectionNote,
+}) => {
+  try {
+    const { sendEmail } = require("../utils/emailService")
+
+    const subject = `Document Rejected by Manager: ${documentTitle}`
+    const html = `
+      <h2>Document Rejection Notification</h2>
+      <p>Hello ${username},</p>
+      <p>Your document <strong>${documentTitle}</strong> has been rejected by manager <strong>${rejectedBy}</strong>.</p>
+      <p><strong>Reason for rejection:</strong> ${rejectionNote}</p>
+      <p>You can relaunch this document after making necessary changes to address the manager's concerns.</p>
+      <p>Document ID: ${documentId}</p>
+      <p>Thank you,<br>Document Management System</p>
+    `
+
+    return await sendEmail({
+      to,
+      subject,
+      html,
+    })
+  } catch (error) {
+    console.error(`Failed to send manager rejection notification email to ${to}:`, error)
+    throw error
   }
 }
 
