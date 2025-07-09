@@ -10,27 +10,61 @@ const {
 
 // Helper function to calculate completion percentage and status
 const calculateCompletionData = (sharePoint) => {
-  const totalSigners = sharePoint.usersToSign?.length || 0;
-  const signedCount = sharePoint.usersToSign?.filter((signer) => signer.hasSigned).length || 0;
-  const disapprovedCount = sharePoint.usersToSign?.filter((signer) => signer.hasDisapproved).length || 0;
+  const totalSigners = sharePoint.usersToSign?.length || 0
+  const signedCount = sharePoint.usersToSign?.filter((signer) => signer.hasSigned).length || 0
+  const disapprovedCount = sharePoint.usersToSign?.filter((signer) => signer.hasDisapproved).length || 0
 
-  const completionPercentage = totalSigners > 0 ? Math.round((signedCount / totalSigners) * 100) : 0;
-  const allUsersSigned = totalSigners > 0 && signedCount === totalSigners;
-  const hasDisapprovals = disapprovedCount > 0;
+  // Calculate completion percentage considering both manager approval and user signatures
+  let completionPercentage = 0
 
-  let status = sharePoint.status;
-  if (hasDisapprovals) {
-    status = "disapproved";
-  } else if (allUsersSigned && sharePoint.managerApproved) {
-    status = "completed";
-  } else if (signedCount > 0 && sharePoint.managerApproved) {
-    status = "in_progress";
+  if (totalSigners > 0) {
+    // Manager approval counts as 50% of completion, user signatures as the other 50%
+    const managerApprovalWeight = 0.5
+    const userSignatureWeight = 0.5
+
+    const managerApprovalProgress = sharePoint.managerApproved ? 1 : 0
+    const userSignatureProgress = signedCount / totalSigners
+
+    completionPercentage = Math.round(
+      (managerApprovalProgress * managerApprovalWeight + userSignatureProgress * userSignatureWeight) * 100,
+    )
   } else if (sharePoint.managerApproved) {
-    status = "pending";
+    // If no users to sign but manager approved, it's 100% complete
+    completionPercentage = 100
   }
 
-  return { completionPercentage, allUsersSigned, status, hasDisapprovals };
-};
+  const allUsersSigned = totalSigners > 0 && signedCount === totalSigners
+  const hasDisapprovals = disapprovedCount > 0
+
+  // Determine status based on workflow state
+  let status = sharePoint.status
+
+  if (hasDisapprovals) {
+    status = "disapproved"
+  } else if (sharePoint.status === "rejected") {
+    status = "rejected"
+  } else if (!sharePoint.managerApproved && sharePoint.status === "pending_approval") {
+    status = "pending_approval"
+  } else if (allUsersSigned && sharePoint.managerApproved) {
+    status = "completed"
+  } else if (signedCount > 0 && sharePoint.managerApproved) {
+    status = "in_progress"
+  } else if (sharePoint.managerApproved) {
+    status = "pending"
+  } else {
+    status = "pending_approval"
+  }
+
+  return {
+    completionPercentage,
+    allUsersSigned,
+    status,
+    hasDisapprovals,
+    signedCount,
+    totalSigners,
+    managerApproved: sharePoint.managerApproved,
+  }
+}
 
 // Create a new SharePoint
 exports.createSharePoint = async (req, res) => {

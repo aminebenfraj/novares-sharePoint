@@ -90,7 +90,7 @@ export default function SharePointCreateEnhanced() {
 
   const [errors, setErrors] = useState({})
   const [selectedUsers, setSelectedUsers] = useState([])
-  const [selectedManagers, setSelectedManagers] = useState([])
+  const [selectedManager, setSelectedManager] = useState(null)
   const [allUsers, setAllUsers] = useState([])
   const [managers, setManagers] = useState([])
   const [filteredUsers, setFilteredUsers] = useState([])
@@ -122,8 +122,8 @@ export default function SharePointCreateEnhanced() {
     },
     {
       id: 2,
-      title: "Select Approvers",
-      description: "Choose managers who can approve",
+      title: "Select Approver",
+      description: "Choose a manager who must approve",
       icon: Shield,
       fields: ["managers"],
     },
@@ -145,18 +145,18 @@ export default function SharePointCreateEnhanced() {
 
   // Calculate form completion progress
   useEffect(() => {
-    const totalFields = 4 // title, link, deadline, managers, usersToSign
+    const totalFields = 5 // title, link, deadline, managers, usersToSign
     let completedFields = 0
 
     if (formData.title.trim()) completedFields++
     if (formData.link.trim()) completedFields++
     if (formData.deadline) completedFields++
-    if (selectedManagers.length > 0) completedFields++
+    if (selectedManager) completedFields++
     if (selectedUsers.length > 0) completedFields++
 
     const progress = (completedFields / totalFields) * 100
     setFormProgress(progress)
-  }, [formData, selectedUsers, selectedManagers])
+  }, [formData, selectedUsers, selectedManager])
 
   useEffect(() => {
     loadAllUsers()
@@ -261,8 +261,8 @@ export default function SharePointCreateEnhanced() {
     }
 
     if (step.fields.includes("managers")) {
-      if (selectedManagers.length === 0) {
-        newErrors.managers = "At least one manager must be selected for approval"
+      if (!selectedManager) {
+        newErrors.managers = "A manager must be selected for approval"
       }
     }
 
@@ -295,16 +295,12 @@ export default function SharePointCreateEnhanced() {
     }
   }
 
-  const handleManagerToggle = (manager) => {
-    const isSelected = selectedManagers.find((m) => m._id === manager._id)
-    if (isSelected) {
-      setSelectedManagers((prev) => prev.filter((m) => m._id !== manager._id))
-    } else {
-      setSelectedManagers((prev) => [...prev, manager])
-    }
+  const handleManagerSelect = (manager) => {
+    setSelectedManager(manager)
     if (errors.managers) {
       setErrors((prev) => ({ ...prev, managers: "" }))
     }
+    setShowManagerSelector(false) // Close selector after selection
   }
 
   const nextStep = () => {
@@ -336,11 +332,11 @@ export default function SharePointCreateEnhanced() {
         comment: formData.comment.trim(),
         deadline: formData.deadline,
         usersToSign: selectedUsers.map((user) => user._id),
-        managersToApprove: selectedManagers.map((manager) => manager._id),
+        managersToApprove: [selectedManager._id],
       }
 
       console.log("Submitting data:", submitData)
-      console.log("Selected managers:", selectedManagers)
+      console.log("Selected managers:", selectedManager)
 
       await createSharePoint(submitData)
 
@@ -422,7 +418,12 @@ export default function SharePointCreateEnhanced() {
   const UserSelector = () => (
     <Popover open={showUserSelector} onOpenChange={setShowUserSelector}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={showUserSelector} className="justify-between w-full">
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={showUserSelector}
+          className="justify-between w-full bg-transparent"
+        >
           {selectedUsers.length > 0
             ? `${selectedUsers.length} user${selectedUsers.length > 1 ? "s" : ""} selected`
             : "Select users to sign..."}
@@ -483,11 +484,9 @@ export default function SharePointCreateEnhanced() {
           variant="outline"
           role="combobox"
           aria-expanded={showManagerSelector}
-          className="justify-between w-full"
+          className="justify-between w-full bg-transparent"
         >
-          {selectedManagers.length > 0
-            ? `${selectedManagers.length} manager${selectedManagers.length > 1 ? "s" : ""} selected`
-            : "Select managers to approve..."}
+          {selectedManager ? selectedManager.username : "Select a manager to approve..."}
           <ChevronsUpDown className="w-4 h-4 ml-2 opacity-50 shrink-0" />
         </Button>
       </PopoverTrigger>
@@ -503,20 +502,20 @@ export default function SharePointCreateEnhanced() {
             <CommandGroup>
               <ScrollArea className="h-64">
                 {filteredManagers.map((manager) => {
-                  const isSelected = selectedManagers.find((m) => m._id === manager._id)
+                  const isSelected = selectedManager?._id === manager._id
                   return (
                     <CommandItem
                       key={manager._id}
-                      onSelect={() => handleManagerToggle(manager)}
+                      onSelect={() => handleManagerSelect(manager)}
                       className="flex items-center gap-2 p-2"
                     >
                       <div
                         className={cn(
-                          "flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                          isSelected ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible",
+                          "flex h-4 w-4 items-center justify-center rounded-full border border-primary",
+                          isSelected ? "bg-primary text-primary-foreground" : "opacity-50",
                         )}
                       >
-                        <Check className="w-3 h-3" />
+                        {isSelected && <div className="w-2 h-2 bg-current rounded-full" />}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
@@ -782,13 +781,13 @@ export default function SharePointCreateEnhanced() {
                         <div className="space-y-2">
                           <h2 className="text-2xl font-semibold">Select Approvers</h2>
                           <p className="text-muted-foreground">
-                            Choose managers who must approve this document before users can sign it. Only approved
+                            Choose a manager who must approve this document before users can sign it. Only approved
                             documents can be signed by assigned users.
                           </p>
                           {/* Debug info */}
                           <div className="p-2 text-xs bg-gray-100 rounded">
                             <p>Debug: {managers.length} managers available</p>
-                            <p>Debug: {selectedManagers.length} managers selected</p>
+                            <p>Debug: {selectedManager ? "1" : "0"} manager selected</p>
                           </div>
                         </div>
 
@@ -809,58 +808,50 @@ export default function SharePointCreateEnhanced() {
                           </div>
 
                           {/* Selected Managers */}
-                          {selectedManagers.length > 0 && (
+                          {selectedManager && (
                             <div className="space-y-3">
                               <div className="flex items-center justify-between">
-                                <Label className="text-sm font-medium">
-                                  Selected Approvers ({selectedManagers.length})
-                                </Label>
+                                <Label className="text-sm font-medium">Selected Approver</Label>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => setSelectedManagers([])}
+                                  onClick={() => setSelectedManager(null)}
                                   className="h-auto p-1 text-xs"
                                 >
-                                  Clear All
+                                  Clear
                                 </Button>
                               </div>
                               <div className="grid gap-2">
-                                <AnimatePresence>
-                                  {selectedManagers.map((manager) => (
-                                    <motion.div
-                                      key={manager._id}
-                                      initial={{ opacity: 0, scale: 0.95 }}
-                                      animate={{ opacity: 1, scale: 1 }}
-                                      exit={{ opacity: 0, scale: 0.95 }}
-                                      className="flex items-center justify-between p-3 border border-blue-200 rounded-lg bg-blue-50"
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
-                                          <Shield className="w-4 h-4 text-blue-600" />
-                                        </div>
-                                        <div>
-                                          <p className="text-sm font-medium">{manager.username}</p>
-                                          <p className="text-xs text-muted-foreground">{manager.email}</p>
-                                          <div className="flex gap-1 mt-1">
-                                            {manager.roles?.slice(0, 3).map((role) => (
-                                              <Badge key={role} variant="secondary" className="text-xs">
-                                                {role}
-                                              </Badge>
-                                            ))}
-                                          </div>
-                                        </div>
+                                <motion.div
+                                  initial={{ opacity: 0, scale: 0.95 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  className="flex items-center justify-between p-3 border border-blue-200 rounded-lg bg-blue-50"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
+                                      <Shield className="w-4 h-4 text-blue-600" />
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium">{selectedManager.username}</p>
+                                      <p className="text-xs text-muted-foreground">{selectedManager.email}</p>
+                                      <div className="flex gap-1 mt-1">
+                                        {selectedManager.roles?.slice(0, 3).map((role) => (
+                                          <Badge key={role} variant="secondary" className="text-xs">
+                                            {role}
+                                          </Badge>
+                                        ))}
                                       </div>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleManagerToggle(manager)}
-                                        className="h-auto p-1"
-                                      >
-                                        <X className="w-4 h-4" />
-                                      </Button>
-                                    </motion.div>
-                                  ))}
-                                </AnimatePresence>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedManager(null)}
+                                    className="h-auto p-1"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                </motion.div>
                               </div>
                             </div>
                           )}
@@ -911,6 +902,7 @@ export default function SharePointCreateEnhanced() {
                                   Clear All
                                 </Button>
                               </div>
+                              \
                               <div className="grid gap-2">
                                 <AnimatePresence>
                                   {selectedUsers.map((user) => (
@@ -999,20 +991,14 @@ export default function SharePointCreateEnhanced() {
                               <Separator />
 
                               <div>
-                                <Label className="text-sm font-medium text-muted-foreground">
-                                  Approvers ({selectedManagers.length})
-                                </Label>
+                                <Label className="text-sm font-medium text-muted-foreground">Approver</Label>
                                 <div className="flex flex-wrap gap-2 mt-2">
-                                  {selectedManagers.map((manager) => (
-                                    <Badge
-                                      key={manager._id}
-                                      variant="outline"
-                                      className="text-blue-600 border-blue-200 bg-blue-50"
-                                    >
+                                  {selectedManager && (
+                                    <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">
                                       <Shield className="w-3 h-3 mr-1" />
-                                      {manager.username}
+                                      {selectedManager.username}
                                     </Badge>
-                                  ))}
+                                  )}
                                 </div>
                               </div>
 
@@ -1041,7 +1027,7 @@ export default function SharePointCreateEnhanced() {
                       variant="outline"
                       onClick={prevStep}
                       disabled={currentStep === 0}
-                      className="flex items-center gap-2"
+                      className="flex items-center gap-2 bg-transparent"
                     >
                       <ArrowLeft className="w-4 h-4" />
                       Previous
