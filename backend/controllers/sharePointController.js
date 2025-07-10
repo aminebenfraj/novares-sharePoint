@@ -1,10 +1,10 @@
 const SharePoint = require("../models/SharePoint")
 const User = require("../models/UserModel")
 const {
-  sendManagerCreationEmail,
-  sendUserAssignmentEmail,
-  sendDisapprovalEmail,
-  sendCompletionEmail,
+  sendManagerApprovalEmail,
+  sendUserSigningEmail,
+  sendRelaunchNotificationEmail,
+  sendCompletionNotificationEmail,
   sendBulkEmails,
 } = require("../utils/emailService")
 
@@ -14,11 +14,9 @@ const calculateCompletionData = (sharePoint) => {
   const signedCount = sharePoint.usersToSign?.filter((signer) => signer.hasSigned).length || 0
   const disapprovedCount = sharePoint.usersToSign?.filter((signer) => signer.hasDisapproved).length || 0
 
-  // Calculate completion percentage considering both manager approval and user signatures
   let completionPercentage = 0
 
   if (totalSigners > 0) {
-    // Manager approval counts as 50% of completion, user signatures as the other 50%
     const managerApprovalWeight = 0.5
     const userSignatureWeight = 0.5
 
@@ -29,14 +27,12 @@ const calculateCompletionData = (sharePoint) => {
       (managerApprovalProgress * managerApprovalWeight + userSignatureProgress * userSignatureWeight) * 100,
     )
   } else if (sharePoint.managerApproved) {
-    // If no users to sign but manager approved, it's 100% complete
     completionPercentage = 100
   }
 
   const allUsersSigned = totalSigners > 0 && signedCount === totalSigners
   const hasDisapprovals = disapprovedCount > 0
 
-  // Determine status based on workflow state
   let status = sharePoint.status
 
   if (hasDisapprovals) {
@@ -66,7 +62,7 @@ const calculateCompletionData = (sharePoint) => {
   }
 }
 
-// Create a new SharePoint
+// Create a new SharePoint - Email to assigned managers
 exports.createSharePoint = async (req, res) => {
   try {
     const { title, link, comment, deadline, usersToSign, managersToApprove } = req.body
@@ -95,17 +91,6 @@ exports.createSharePoint = async (req, res) => {
     const selectedManagers = await User.find({ _id: { $in: managersToApprove } }).select("_id username email roles")
     if (selectedManagers.length !== managersToApprove.length) {
       return res.status(400).json({ error: "One or more selected managers do not exist" })
-    }
-
-    const managerRoles = ["Admin", "Manager", "Project Manager", "Business Manager", "Department Manager"]
-    const invalidManagers = selectedManagers.filter(
-      (manager) => !manager.roles || !manager.roles.some((role) => managerRoles.includes(role)),
-    )
-
-    if (invalidManagers.length > 0) {
-      return res.status(400).json({
-        error: `Selected users do not have manager roles: ${invalidManagers.map((m) => m.username).join(", ")}`,
-      })
     }
 
     const sharePoint = new SharePoint({
@@ -141,6 +126,7 @@ exports.createSharePoint = async (req, res) => {
       { path: "managersToApprove", select: "username email roles" },
     ])
 
+    // Send email to assigned managers for approval
     try {
       const managerEmailList = selectedManagers.map((manager) => ({
         to: manager.email,
@@ -153,8 +139,8 @@ exports.createSharePoint = async (req, res) => {
         documentId: sharePoint._id.toString(),
       }))
 
-      await Promise.allSettled(managerEmailList.map((emailOptions) => sendManagerCreationEmail(emailOptions)))
-      console.log(`📧 Manager creation emails sent successfully`)
+      await sendBulkEmails(managerEmailList, "managerApproval")
+      console.log(`📧 Manager approval emails sent successfully`)
     } catch (emailError) {
       console.error("❌ Email notification failed:", emailError)
     }
@@ -176,7 +162,413 @@ exports.createSharePoint = async (req, res) => {
   }
 }
 
-// Get all SharePoints
+// Manager approves document - Email to assigned users
+exports.approveSharePoint = async (req, res) => {
+  try {
+    const { approved, approvalNote } = req.body
+    const sharePoint = await SharePoint.findById(req.params.id)
+      .populate("createdBy", "username email roles")
+      .populate("usersToSign.user", "username email roles")
+      .populate("managersToApprove", "username email roles")
+
+    if (!sharePoint) {
+      return res.status(404).json({ error: "SharePoint not found" })
+    }
+
+    const isSelectedManager = sharePoint.managersToApprove.some((managerId) =>
+      [String(managerId), String(req.user._id), String(req.user.license)].includes(String(managerId)),
+    )
+
+    if (!isSelectedManager) {
+      return res.status(403).json({ error: "You don't have permission to approve this document." })
+    }
+
+    if (!approved && (!approvalNote || !approvalNote.trim())) {
+      return res.status(400).json({ error: "A comment is required when rejecting a document" })
+    }
+
+    sharePoint.managerApproved = approved
+    sharePoint.approvedBy = req.user._id
+    sharePoint.approvedAt = new Date()
+    sharePoint.status = approved ? "pending" : "rejected"
+
+    if (!approved) {
+      sharePoint.disapprovalNote = approvalNote.trim()
+    }
+
+    sharePoint.updateHistory.push({
+      action: approved ? "approved" : "rejected",
+      performedBy: req.user._id,
+      details: approved
+        ? `Document approved by manager ${req.user.username}${approvalNote && approvalNote.trim() ? ` with comment: ${approvalNote.trim()}` : ""}`
+        : `Document rejected by manager ${req.user.username} with reason: ${approvalNote.trim()}`,
+      comment: approvalNote && approvalNote.trim() ? approvalNote.trim() : null,
+      userAction: {
+        type: approved ? "manager_approval" : "manager_rejection",
+        userId: req.user._id,
+        username: req.user.username,
+        timestamp: new Date(),
+        note: approvalNote && approvalNote.trim() ? approvalNote.trim() : null,
+        reason: !approved ? approvalNote.trim() : null,
+      },
+    })
+
+    await sharePoint.save()
+
+    if (approved) {
+      // Send email to assigned users for signing
+      try {
+        const userEmailList = sharePoint.usersToSign.map((signer) => ({
+          to: signer.user.email,
+          username: signer.user.username,
+          documentTitle: sharePoint.title,
+          documentLink: sharePoint.link,
+          deadline: sharePoint.deadline,
+          createdBy: sharePoint.createdBy.username,
+          approvedBy: req.user.username,
+          comment: sharePoint.comment || "",
+          documentId: sharePoint._id.toString(),
+        }))
+
+        await sendBulkEmails(userEmailList, "userSigning")
+        console.log(`📧 User signing notifications sent successfully`)
+      } catch (emailError) {
+        console.error("❌ Failed to send user signing notifications:", emailError)
+      }
+    } else {
+      // Send relaunch notification to creator
+      try {
+        await sendRelaunchNotificationEmail({
+          to: sharePoint.createdBy.email,
+          username: sharePoint.createdBy.username,
+          documentTitle: sharePoint.title,
+          documentId: sharePoint._id.toString(),
+          disapprovedBy: req.user.username,
+          disapprovalNote: approvalNote.trim(),
+          isManagerDisapproval: true,
+        })
+        console.log(`📧 Relaunch notification sent to creator`)
+      } catch (emailError) {
+        console.error("❌ Failed to send relaunch notification:", emailError)
+      }
+    }
+
+    await sharePoint.populate([
+      { path: "createdBy", select: "username email roles" },
+      { path: "usersToSign.user", select: "username email roles" },
+      { path: "approvedBy", select: "username email" },
+    ])
+
+    const completionData = calculateCompletionData(sharePoint)
+    const responseData = {
+      ...sharePoint.toObject(),
+      ...completionData,
+    }
+
+    res.json({
+      message: `SharePoint ${approved ? "approved" : "rejected"} successfully${approved ? ". Users have been notified." : ". Creator has been notified."}`,
+      sharePoint: responseData,
+    })
+  } catch (error) {
+    console.error("Error approving SharePoint:", error)
+    res.status(500).json({ error: "Error approving SharePoint" })
+  }
+}
+
+// User signs document - Check if all signed, then email creator completion
+exports.signSharePoint = async (req, res) => {
+  try {
+    const { signatureNote } = req.body
+    const sharePoint = await SharePoint.findById(req.params.id)
+      .populate("createdBy", "username email roles")
+      .populate("usersToSign.user", "username email roles")
+
+    if (!sharePoint) {
+      return res.status(404).json({ error: "SharePoint not found" })
+    }
+
+    if (!sharePoint.managerApproved) {
+      return res.status(403).json({
+        error: "Document must be approved by a manager before users can sign it",
+        code: "MANAGER_APPROVAL_REQUIRED",
+      })
+    }
+
+    const signerIndex = sharePoint.usersToSign.findIndex(
+      (signer) => signer.user._id.toString() === req.user._id.toString(),
+    )
+
+    if (signerIndex === -1) {
+      return res.status(403).json({ error: "You are not authorized to sign this SharePoint" })
+    }
+
+    if (sharePoint.usersToSign[signerIndex].hasSigned) {
+      return res.status(400).json({ error: "You have already signed this SharePoint" })
+    }
+
+    sharePoint.usersToSign[signerIndex].hasSigned = true
+    sharePoint.usersToSign[signerIndex].signedAt = new Date()
+    if (signatureNote && signatureNote.trim()) {
+      sharePoint.usersToSign[signerIndex].signatureNote = signatureNote.trim()
+    }
+
+    const completionData = calculateCompletionData(sharePoint)
+    sharePoint.status = completionData.status
+
+    sharePoint.updateHistory.push({
+      action: "signed",
+      performedBy: req.user._id,
+      details: `Document signed by ${req.user.username}${signatureNote && signatureNote.trim() ? ` with comment: ${signatureNote.trim()}` : ""}`,
+      comment: signatureNote && signatureNote.trim() ? signatureNote.trim() : null,
+      userAction: {
+        type: "approval",
+        userId: req.user._id,
+        username: req.user.username,
+        timestamp: new Date(),
+        note: signatureNote && signatureNote.trim() ? signatureNote.trim() : null,
+      },
+    })
+
+    await sharePoint.save()
+
+    // If all users have signed, send completion notification to creator
+    if (completionData.status === "completed") {
+      try {
+        await sendCompletionNotificationEmail({
+          to: sharePoint.createdBy.email,
+          username: sharePoint.createdBy.username,
+          documentTitle: sharePoint.title,
+          documentId: sharePoint._id.toString(),
+        })
+        console.log(`📧 Completion notification sent to creator`)
+      } catch (emailError) {
+        console.error("❌ Failed to send completion notification:", emailError)
+      }
+    }
+
+    await sharePoint.populate([
+      { path: "createdBy", select: "username email roles" },
+      { path: "usersToSign.user", select: "username email roles" },
+    ])
+
+    const responseData = {
+      ...sharePoint.toObject(),
+      ...completionData,
+    }
+
+    res.json({
+      message: "SharePoint signed successfully",
+      sharePoint: responseData,
+    })
+  } catch (error) {
+    console.error("Error signing SharePoint:", error)
+    res.status(500).json({ error: "Error signing SharePoint" })
+  }
+}
+
+// User disapproves document - Email creator for relaunch
+exports.disapproveSharePoint = async (req, res) => {
+  try {
+    const { disapprovalNote } = req.body
+    const sharePoint = await SharePoint.findById(req.params.id)
+      .populate("createdBy", "username email roles")
+      .populate("usersToSign.user", "username email roles")
+
+    if (!sharePoint) {
+      return res.status(404).json({ error: "SharePoint not found" })
+    }
+
+    if (!sharePoint.managerApproved) {
+      return res.status(403).json({
+        error: "Document must be approved by a manager before users can disapprove it",
+        code: "MANAGER_APPROVAL_REQUIRED",
+      })
+    }
+
+    const signerIndex = sharePoint.usersToSign.findIndex(
+      (signer) => signer.user && signer.user._id.toString() === req.user._id.toString(),
+    )
+
+    if (signerIndex === -1) {
+      return res.status(403).json({ error: "You are not authorized to disapprove this SharePoint" })
+    }
+
+    if (sharePoint.usersToSign[signerIndex].hasSigned) {
+      return res.status(400).json({ error: "You have already signed this SharePoint" })
+    }
+
+    if (sharePoint.usersToSign[signerIndex].hasDisapproved) {
+      return res.status(400).json({ error: "You have already disapproved this SharePoint" })
+    }
+
+    if (!disapprovalNote || !disapprovalNote.trim()) {
+      return res.status(400).json({ error: "Disapproval comment is required" })
+    }
+
+    sharePoint.usersToSign[signerIndex].hasDisapproved = true
+    sharePoint.usersToSign[signerIndex].disapprovedAt = new Date()
+    sharePoint.usersToSign[signerIndex].disapprovalNote = disapprovalNote.trim()
+
+    sharePoint.status = "disapproved"
+    sharePoint.disapprovalNote = disapprovalNote.trim()
+
+    sharePoint.updateHistory.push({
+      action: "disapproved",
+      performedBy: req.user._id,
+      details: `Document disapproved by ${req.user.username}: ${disapprovalNote.trim()}`,
+      comment: disapprovalNote.trim(),
+      userAction: {
+        type: "disapproval",
+        userId: req.user._id,
+        username: req.user.username,
+        timestamp: new Date(),
+        reason: disapprovalNote.trim(),
+      },
+    })
+
+    await sharePoint.save()
+
+    // Send relaunch notification to creator
+    try {
+      await sendRelaunchNotificationEmail({
+        to: sharePoint.createdBy.email,
+        username: sharePoint.createdBy.username,
+        documentTitle: sharePoint.title,
+        documentId: sharePoint._id.toString(),
+        disapprovedBy: req.user.username,
+        disapprovalNote: disapprovalNote.trim(),
+        isManagerDisapproval: false,
+      })
+      console.log(`📧 Relaunch notification sent to creator`)
+    } catch (emailError) {
+      console.error("❌ Failed to send relaunch notification:", emailError)
+    }
+
+    await sharePoint.populate([
+      { path: "createdBy", select: "username email roles" },
+      { path: "usersToSign.user", select: "username email roles" },
+    ])
+
+    const completionData = calculateCompletionData(sharePoint)
+    const responseData = {
+      ...sharePoint.toObject(),
+      ...completionData,
+    }
+
+    res.json({
+      message: "SharePoint disapproved successfully. Creator has been notified.",
+      sharePoint: responseData,
+    })
+  } catch (error) {
+    console.error("Error disapproving SharePoint:", error)
+    res.status(500).json({ error: "Error disapproving SharePoint" })
+  }
+}
+
+// Creator relaunches document - Email to assigned managers again
+exports.relaunchSharePoint = async (req, res) => {
+  try {
+    const { relaunchComment } = req.body
+    const sharePoint = await SharePoint.findById(req.params.id)
+      .populate("createdBy", "username email roles")
+      .populate("managersToApprove", "username email roles")
+      .populate("usersToSign.user", "username email roles")
+
+    if (!sharePoint) {
+      return res.status(404).json({ error: "SharePoint not found" })
+    }
+
+    if (sharePoint.createdBy._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: "Only the document creator can relaunch the document" })
+    }
+
+    if (sharePoint.status !== "disapproved" && sharePoint.status !== "rejected") {
+      return res.status(400).json({
+        error: "Only disapproved or rejected documents can be relaunched",
+        currentStatus: sharePoint.status,
+      })
+    }
+
+    // Reset document state
+    sharePoint.status = "pending_approval"
+    sharePoint.managerApproved = false
+    sharePoint.approvedBy = null
+    sharePoint.approvedAt = null
+    sharePoint.disapprovalNote = null
+
+    // Reset all user signatures and disapprovals
+    const resetSigners = sharePoint.usersToSign.map((signer) => ({
+      ...signer.toObject(),
+      hasSigned: false,
+      signedAt: null,
+      signatureNote: null,
+      hasDisapproved: false,
+      disapprovedAt: null,
+      disapprovalNote: null,
+    }))
+    sharePoint.usersToSign = resetSigners
+
+    const relaunchCommentText = relaunchComment && relaunchComment.trim()
+      ? relaunchComment.trim()
+      : "Document relaunched to address previous concerns"
+
+    sharePoint.updateHistory.push({
+      action: "relaunched",
+      performedBy: req.user._id,
+      details: `Document relaunched by ${req.user.username}`,
+      comment: relaunchCommentText,
+      userAction: {
+        type: "relaunch",
+        userId: req.user._id,
+        username: req.user.username,
+        timestamp: new Date(),
+        note: relaunchCommentText,
+      },
+    })
+
+    await sharePoint.save()
+
+    // Send email to assigned managers for re-approval
+    try {
+      const managerEmailList = sharePoint.managersToApprove.map((manager) => ({
+        to: manager.email,
+        username: manager.username,
+        documentTitle: sharePoint.title,
+        documentLink: sharePoint.link,
+        deadline: sharePoint.deadline,
+        createdBy: req.user.username,
+        comment: sharePoint.comment || "",
+        documentId: sharePoint._id.toString(),
+      }))
+
+      await sendBulkEmails(managerEmailList, "managerApproval")
+      console.log("📧 Manager re-approval notifications sent successfully")
+    } catch (emailError) {
+      console.error("❌ Failed to send re-approval notifications:", emailError)
+    }
+
+    await sharePoint.populate([
+      { path: "createdBy", select: "username email roles" },
+      { path: "usersToSign.user", select: "username email roles" },
+    ])
+
+    const completionData = calculateCompletionData(sharePoint)
+    const responseData = {
+      ...sharePoint.toObject(),
+      ...completionData,
+    }
+
+    res.json({
+      message: `SharePoint relaunched successfully. Managers have been notified for re-approval.`,
+      sharePoint: responseData,
+    })
+  } catch (error) {
+    console.error("Error relaunching SharePoint:", error)
+    res.status(500).json({ error: "Error relaunching SharePoint" })
+  }
+}
+
+// Keep all other existing functions unchanged
 exports.getAllSharePoints = async (req, res) => {
   try {
     const {
@@ -245,7 +637,6 @@ exports.getAllSharePoints = async (req, res) => {
   }
 }
 
-// Get SharePoint by ID
 exports.getSharePointById = async (req, res) => {
   try {
     if (!req.user || !req.user.roles) {
@@ -275,107 +666,6 @@ exports.getSharePointById = async (req, res) => {
   }
 }
 
-// Sign SharePoint - Enhanced with comment support
-exports.signSharePoint = async (req, res) => {
-  try {
-    const { signatureNote } = req.body
-    const sharePoint = await SharePoint.findById(req.params.id)
-      .populate("createdBy", "username email roles")
-      .populate("usersToSign.user", "username email roles")
-
-    if (!sharePoint) {
-      return res.status(404).json({ error: "SharePoint not found" })
-    }
-
-    if (!sharePoint.managerApproved) {
-      return res.status(403).json({
-        error: "Document must be approved by a manager before users can sign it",
-        code: "MANAGER_APPROVAL_REQUIRED",
-      })
-    }
-
-    const signerIndex = sharePoint.usersToSign.findIndex(
-      (signer) => signer.user._id.toString() === req.user._id.toString(),
-    )
-
-    if (signerIndex === -1) {
-      return res.status(403).json({ error: "You are not authorized to sign this SharePoint" })
-    }
-
-    if (sharePoint.usersToSign[signerIndex].hasSigned) {
-      return res.status(400).json({ error: "You have already signed this SharePoint" })
-    }
-
-    sharePoint.usersToSign[signerIndex].hasSigned = true
-    sharePoint.usersToSign[signerIndex].signedAt = new Date()
-    if (signatureNote && signatureNote.trim()) {
-      sharePoint.usersToSign[signerIndex].signatureNote = signatureNote.trim()
-    }
-
-    const completionData = calculateCompletionData(sharePoint)
-    sharePoint.status = completionData.status
-
-    sharePoint.updateHistory.push({
-      action: "signed",
-      performedBy: req.user._id,
-      details: `Document signed by ${req.user.username}${signatureNote && signatureNote.trim() ? ` with comment: ${signatureNote.trim()}` : ""}`,
-      comment: signatureNote && signatureNote.trim() ? signatureNote.trim() : null,
-      userAction: {
-        type: "approval",
-        userId: req.user._id,
-        username: req.user.username,
-        timestamp: new Date(),
-        note: signatureNote && signatureNote.trim() ? signatureNote.trim() : null,
-      },
-    })
-
-    await sharePoint.save()
-
-    if (completionData.status === "completed") {
-      try {
-        const completionEmailList = [
-          {
-            to: sharePoint.createdBy.email,
-            username: sharePoint.createdBy.username,
-            documentTitle: sharePoint.title,
-            documentId: sharePoint._id.toString(),
-          },
-          ...sharePoint.managersToApprove.map((manager) => ({
-            to: manager.email,
-            username: manager.username,
-            documentTitle: sharePoint.title,
-            documentId: sharePoint._id.toString(),
-          })),
-        ]
-
-        await sendBulkEmails(completionEmailList, "completion")
-        console.log(`📧 Completion notifications sent to creator and managers`)
-      } catch (emailError) {
-        console.error("❌ Failed to send completion emails:", emailError)
-      }
-    }
-
-    await sharePoint.populate([
-      { path: "createdBy", select: "username email roles" },
-      { path: "usersToSign.user", select: "username email roles" },
-    ])
-
-    const responseData = {
-      ...sharePoint.toObject(),
-      ...completionData,
-    }
-
-    res.json({
-      message: "SharePoint signed successfully",
-      sharePoint: responseData,
-    })
-  } catch (error) {
-    console.error("Error signing SharePoint:", error)
-    res.status(500).json({ error: "Error signing SharePoint" })
-  }
-}
-
-// Get SharePoints assigned to current user
 exports.getMyAssignedSharePoints = async (req, res) => {
   try {
     const { status, page = 1, limit = 10, sortBy = "createdAt", sortOrder = "desc", search = "" } = req.query
@@ -426,7 +716,6 @@ exports.getMyAssignedSharePoints = async (req, res) => {
   }
 }
 
-// Get SharePoints created by current user
 exports.getMyCreatedSharePoints = async (req, res) => {
   try {
     const { status, page = 1, limit = 10, sortBy = "createdAt", sortOrder = "desc", search = "" } = req.query
@@ -477,7 +766,6 @@ exports.getMyCreatedSharePoints = async (req, res) => {
   }
 }
 
-// Update SharePoint
 exports.updateSharePoint = async (req, res) => {
   try {
     const { title, link, comment, deadline, usersToSign } = req.body
@@ -559,343 +847,6 @@ exports.updateSharePoint = async (req, res) => {
   }
 }
 
-// Disapprove SharePoint - Enhanced with required comment
-exports.disapproveSharePoint = async (req, res) => {
-  try {
-    const { disapprovalNote } = req.body
-    const sharePoint = await SharePoint.findById(req.params.id)
-      .populate("createdBy", "username email roles")
-      .populate("usersToSign.user", "username email roles")
-
-    if (!sharePoint) {
-      return res.status(404).json({ error: "SharePoint not found" })
-    }
-
-    if (!sharePoint.managerApproved) {
-      return res.status(403).json({
-        error: "Document must be approved by a manager before users can disapprove it",
-        code: "MANAGER_APPROVAL_REQUIRED",
-      })
-    }
-
-    const signerIndex = sharePoint.usersToSign.findIndex(
-      (signer) => signer.user && signer.user._id.toString() === req.user._id.toString(),
-    )
-
-    if (signerIndex === -1) {
-      return res.status(403).json({ error: "You are not authorized to disapprove this SharePoint" })
-    }
-
-    if (sharePoint.usersToSign[signerIndex].hasSigned) {
-      return res.status(400).json({ error: "You have already signed this SharePoint" })
-    }
-
-    if (sharePoint.usersToSign[signerIndex].hasDisapproved) {
-      return res.status(400).json({ error: "You have already disapproved this SharePoint" })
-    }
-
-    if (!disapprovalNote || !disapprovalNote.trim()) {
-      return res.status(400).json({ error: "Disapproval comment is required" })
-    }
-
-    sharePoint.usersToSign[signerIndex].hasDisapproved = true
-    sharePoint.usersToSign[signerIndex].disapprovedAt = new Date()
-    sharePoint.usersToSign[signerIndex].disapprovalNote = disapprovalNote.trim()
-
-    sharePoint.status = "disapproved"
-    sharePoint.disapprovalNote = disapprovalNote.trim()
-
-    sharePoint.updateHistory.push({
-      action: "disapproved",
-      performedBy: req.user._id,
-      details: `Document disapproved by ${req.user.username}: ${disapprovalNote.trim()}`,
-      comment: disapprovalNote.trim(),
-      userAction: {
-        type: "disapproval",
-        userId: req.user._id,
-        username: req.user.username,
-        timestamp: new Date(),
-        reason: disapprovalNote.trim(),
-      },
-    })
-
-    await sharePoint.save()
-
-    try {
-      await sendDisapprovalEmail({
-        to: sharePoint.createdBy.email,
-        username: sharePoint.createdBy.username,
-        documentTitle: sharePoint.title,
-        documentId: sharePoint._id.toString(),
-        disapprovedBy: req.user.username,
-        disapprovalNote: disapprovalNote.trim(),
-        isManagerDisapproval: false,
-      })
-      console.log(`📧 Disapproval notification sent to creator: ${sharePoint.createdBy.email}`)
-    } catch (emailError) {
-      console.error("❌ Failed to send disapproval notification:", emailError)
-    }
-
-    await sharePoint.populate([
-      { path: "createdBy", select: "username email roles" },
-      { path: "usersToSign.user", select: "username email roles" },
-    ])
-
-    const completionData = calculateCompletionData(sharePoint)
-    const responseData = {
-      ...sharePoint.toObject(),
-      ...completionData,
-    }
-
-    res.json({
-      message: "SharePoint disapproved successfully. Creator has been notified.",
-      sharePoint: responseData,
-    })
-  } catch (error) {
-    console.error("Error disapproving SharePoint:", error)
-    res.status(500).json({ error: "Error disapproving SharePoint" })
-  }
-}
-
-// Relaunch SharePoint - Enhanced with comment support
-exports.relaunchSharePoint = async (req, res) => {
-  try {
-    const { relaunchComment } = req.body
-    const sharePoint = await SharePoint.findById(req.params.id)
-      .populate("createdBy", "username email roles")
-      .populate("managersToApprove", "username email roles")
-      .populate("usersToSign.user", "username email roles")
-
-    if (!sharePoint) {
-      return res.status(404).json({ error: "SharePoint not found" })
-    }
-
-    if (sharePoint.createdBy._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ error: "Only the document creator can relaunch the document" })
-    }
-
-    if (sharePoint.status !== "disapproved" && sharePoint.status !== "rejected") {
-      return res.status(400).json({
-        error: "Only disapproved or rejected documents can be relaunched",
-        currentStatus: sharePoint.status,
-      })
-    }
-
-    const previousIssues = [
-      ...sharePoint.usersToSign
-        .filter((signer) => signer.hasDisapproved)
-        .map((signer) => ({
-          type: "user_disapproval",
-          username: signer.user?.username,
-          reason: signer.disapprovalNote,
-          timestamp: signer.disapprovedAt,
-        })),
-      ...sharePoint.updateHistory
-        .filter((entry) => entry.action === "rejected")
-        .map((entry) => ({
-          type: "manager_rejection",
-          username: entry.userAction?.username || "Manager",
-          reason: entry.comment || "No reason provided",
-          timestamp: entry.timestamp || entry.createdAt,
-        })),
-    ]
-
-    sharePoint.status = "pending_approval"
-    sharePoint.managerApproved = false
-    sharePoint.approvedBy = null
-    sharePoint.approvedAt = null
-    sharePoint.disapprovalNote = null
-
-    const resetSigners = sharePoint.usersToSign.map((signer) => ({
-      ...signer.toObject(),
-      hasDisapproved: false,
-      disapprovedAt: null,
-      disapprovalNote: null,
-    }))
-    sharePoint.usersToSign = resetSigners
-
-    const issuesSummary = previousIssues.map((issue) => `${issue.username} (${issue.type}): ${issue.reason}`).join("; ")
-
-    const relaunchDetails = `Document relaunched by ${req.user.username} after ${sharePoint.status === "rejected" ? "manager rejection" : "user disapproval"}. Previous issues: ${issuesSummary}`
-    const relaunchCommentText =
-      relaunchComment && relaunchComment.trim()
-        ? relaunchComment.trim()
-        : `Relaunched to address previous concerns: ${previousIssues.map((issue) => issue.reason).join("; ")}`
-
-    sharePoint.updateHistory.push({
-      action: "relaunched",
-      performedBy: req.user._id,
-      details: relaunchDetails,
-      comment: relaunchCommentText,
-      userAction: {
-        type: "relaunch",
-        userId: req.user._id,
-        username: req.user.username,
-        timestamp: new Date(),
-        note: relaunchCommentText,
-        previousIssues: previousIssues,
-        relaunchReason: sharePoint.status === "rejected" ? "manager_rejection" : "user_disapproval",
-      },
-    })
-
-    await sharePoint.save()
-
-    try {
-      const managerEmailList = sharePoint.managersToApprove.map((manager) => ({
-        to: manager.email,
-        username: manager.username,
-        documentTitle: sharePoint.title,
-        documentLink: sharePoint.link,
-        deadline: sharePoint.deadline,
-        createdBy: req.user.username,
-        comment: sharePoint.comment || "",
-        documentId: sharePoint._id.toString(),
-      }))
-
-      await Promise.allSettled(managerEmailList.map((emailOptions) => sendManagerCreationEmail(emailOptions)))
-      console.log("📧 Manager re-approval notifications sent successfully")
-    } catch (emailError) {
-      console.error("❌ Failed to send re-approval notifications:", emailError)
-    }
-
-    await sharePoint.populate([
-      { path: "createdBy", select: "username email roles" },
-      { path: "usersToSign.user", select: "username email roles" },
-    ])
-
-    const completionData = calculateCompletionData(sharePoint)
-    const responseData = {
-      ...sharePoint.toObject(),
-      ...completionData,
-    }
-
-    res.json({
-      message: `SharePoint relaunched successfully. Managers have been notified for re-approval.`,
-      sharePoint: responseData,
-      relaunchReason: sharePoint.status === "rejected" ? "manager_rejection" : "user_disapproval",
-      previousIssuesCount: previousIssues.length,
-    })
-  } catch (error) {
-    console.error("Error relaunching SharePoint:", error)
-    res.status(500).json({ error: "Error relaunching SharePoint" })
-  }
-}
-
-// Approve SharePoint (Manager only) - Enhanced with comment support
-exports.approveSharePoint = async (req, res) => {
-  try {
-    const { approved, approvalNote } = req.body
-    const sharePoint = await SharePoint.findById(req.params.id)
-      .populate("createdBy", "username email roles")
-      .populate("usersToSign.user", "username email roles")
-      .populate("managersToApprove", "username email roles")
-
-    if (!sharePoint) {
-      return res.status(404).json({ error: "SharePoint not found" })
-    }
-
-    const isSelectedManager = sharePoint.managersToApprove.some((managerId) =>
-      [String(managerId), String(req.user._id), String(req.user.license)].includes(String(managerId)),
-    )
-
-    if (!isSelectedManager) {
-      return res.status(403).json({ error: "You don't have permission to approve this document." })
-    }
-
-    // For rejections, require a comment
-    if (!approved && (!approvalNote || !approvalNote.trim())) {
-      return res.status(400).json({ error: "A comment is required when rejecting a document" })
-    }
-
-    sharePoint.managerApproved = approved
-    sharePoint.approvedBy = req.user._id
-    sharePoint.approvedAt = new Date()
-
-    sharePoint.status = approved ? "pending" : "rejected"
-
-    // If rejecting, set the disapproval note at document level
-    if (!approved) {
-      sharePoint.disapprovalNote = approvalNote.trim()
-    }
-
-    sharePoint.updateHistory.push({
-      action: approved ? "approved" : "rejected",
-      performedBy: req.user._id,
-      details: approved
-        ? `Document approved by manager ${req.user.username}${approvalNote && approvalNote.trim() ? ` with comment: ${approvalNote.trim()}` : ""}`
-        : `Document rejected by manager ${req.user.username} with reason: ${approvalNote.trim()}`,
-      comment: approvalNote && approvalNote.trim() ? approvalNote.trim() : null,
-      userAction: {
-        type: approved ? "manager_approval" : "manager_rejection",
-        userId: req.user._id,
-        username: req.user.username,
-        timestamp: new Date(),
-        note: approvalNote && approvalNote.trim() ? approvalNote.trim() : null,
-        reason: !approved ? approvalNote.trim() : null,
-      },
-    })
-
-    await sharePoint.save()
-
-    if (approved) {
-      try {
-        const userEmailList = sharePoint.usersToSign.map((signer) => ({
-          to: signer.user.email,
-          username: signer.user.username,
-          documentTitle: sharePoint.title,
-          documentLink: sharePoint.link,
-          deadline: sharePoint.deadline,
-          createdBy: sharePoint.createdBy.username,
-          approvedBy: req.user.username,
-          comment: sharePoint.comment || "",
-          documentId: sharePoint._id.toString(),
-        }))
-
-        await sendBulkEmails(userEmailList, "userAssignment")
-        console.log(`📧 User assignment notifications sent successfully`)
-      } catch (emailError) {
-        console.error("❌ Failed to send user assignment notifications:", emailError)
-      }
-    } else {
-      try {
-        await sendDisapprovalEmail({
-          to: sharePoint.createdBy.email,
-          username: sharePoint.createdBy.username,
-          documentTitle: sharePoint.title,
-          documentId: sharePoint._id.toString(),
-          disapprovedBy: req.user.username,
-          disapprovalNote: approvalNote.trim(),
-          isManagerDisapproval: true,
-        })
-        console.log(`📧 Rejection notification sent to creator`)
-      } catch (emailError) {
-        console.error("❌ Failed to send rejection notification:", emailError)
-      }
-    }
-
-    await sharePoint.populate([
-      { path: "createdBy", select: "username email roles" },
-      { path: "usersToSign.user", select: "username email roles" },
-      { path: "approvedBy", select: "username email" },
-    ])
-
-    const completionData = calculateCompletionData(sharePoint)
-    const responseData = {
-      ...sharePoint.toObject(),
-      ...completionData,
-    }
-
-    res.json({
-      message: `SharePoint ${approved ? "approved" : "rejected"} successfully${approved ? ". Users have been notified." : ". Creator has been notified."}`,
-      sharePoint: responseData,
-    })
-  } catch (error) {
-    console.error("Error approving SharePoint:", error)
-    res.status(500).json({ error: "Error approving SharePoint" })
-  }
-}
-
-// Check if user can sign
 exports.canUserSign = async (req, res) => {
   try {
     const sharePoint = await SharePoint.findById(req.params.id)
@@ -925,7 +876,6 @@ exports.canUserSign = async (req, res) => {
   }
 }
 
-// Get documents needing approval from current user
 exports.getMyApprovalSharePoints = async (req, res) => {
   try {
     const { status, page = 1, limit = 10, sortBy = "createdAt", sortOrder = "desc", search = "" } = req.query
@@ -978,7 +928,6 @@ exports.getMyApprovalSharePoints = async (req, res) => {
   }
 }
 
-// Delete SharePoint
 exports.deleteSharePoint = async (req, res) => {
   try {
     const sharePoint = await SharePoint.findById(req.params.id)
@@ -987,7 +936,6 @@ exports.deleteSharePoint = async (req, res) => {
       return res.status(404).json({ error: "SharePoint not found" })
     }
 
-    // Check permissions - only creator or admin can delete
     if (!req.user.roles.includes("Admin") && sharePoint.createdBy.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: "You don't have permission to delete this SharePoint" })
     }
