@@ -28,7 +28,7 @@ exports.sendManagerApprovalEmail = async (options) => {
   try {
     const { to, username, documentTitle, documentLink, deadline, createdBy, comment = "", documentId } = options;
 
-    const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com";
     const taskUrl = `${baseUrl}/sharepoint/${documentId}`;
 
     const formattedDeadline = new Date(deadline).toLocaleDateString("en-US", {
@@ -121,7 +121,7 @@ exports.sendUserSigningEmail = async (options) => {
   try {
     const { to, username, documentTitle, documentLink, deadline, createdBy, approvedBy, comment = "", documentId } = options;
 
-    const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com";
     const taskUrl = `${baseUrl}/sharepoint/${documentId}`;
 
     const formattedDeadline = new Date(deadline).toLocaleDateString("en-US", {
@@ -218,7 +218,7 @@ exports.sendRelaunchNotificationEmail = async (options) => {
   try {
     const { to, username, documentTitle, documentId, disapprovedBy, disapprovalNote, isManagerDisapproval } = options;
 
-    const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com";
     const documentUrl = `${baseUrl}/sharepoint/${documentId}`;
 
     const disapprovalType = isManagerDisapproval ? "Manager" : "User";
@@ -280,7 +280,7 @@ exports.sendCompletionNotificationEmail = async (options) => {
   try {
     const { to, username, documentTitle, documentId } = options;
 
-    const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com";
     const documentUrl = `${baseUrl}/sharepoint/${documentId}`;
 
     const htmlContent = `
