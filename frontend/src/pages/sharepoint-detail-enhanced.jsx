@@ -65,7 +65,6 @@ import { useAuth } from "../context/AuthContext"
 import MainLayout from "../components/MainLayout"
 import WorkflowStatusIndicator from "../components/workflow-status-indicator"
 import { getCurrentUser } from "../apis/auth"
-// Import html2pdf.js for PDF generation
 import html2pdf from "html2pdf.js"
 
 // Animation variants
@@ -123,6 +122,7 @@ export default function SharePointDetailEnhanced({
   const [approvalNote, setApprovalNote] = useState("")
   const [disapprovalNote, setDisapprovalNote] = useState("")
   const [managerApprovalNote, setManagerApprovalNote] = useState("")
+  const [relaunchComment, setRelaunchComment] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showApproveDialog, setShowApproveDialog] = useState(false)
   const [showManagerApproveDialog, setShowManagerApproveDialog] = useState(false)
@@ -239,11 +239,11 @@ export default function SharePointDetailEnhanced({
   const canUserApprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved
   const canUserDisapprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved
 
-  // User approval (after manager approval)
+  // User approval (after manager approval) - Enhanced with comment
   const handleUserApprove = async () => {
     try {
       setIsSubmitting(true)
-      await signSharePoint(documentId, approvalNote)
+      await signSharePoint(documentId, approvalNote.trim())
       toast({
         title: "Document Approved",
         description: "You have successfully approved this document.",
@@ -263,11 +263,11 @@ export default function SharePointDetailEnhanced({
     }
   }
 
-  // Manager approval with note
+  // Manager approval with comment - Enhanced
   const handleManagerApprove = async () => {
     try {
       setIsSubmitting(true)
-      await approveSharePoint(documentId, true, managerApprovalNote)
+      await approveSharePoint(documentId, true, managerApprovalNote.trim())
       toast({
         title: "Document Approved by Manager",
         description: "You have approved this document. Users can now provide their approvals.",
@@ -287,11 +287,11 @@ export default function SharePointDetailEnhanced({
     }
   }
 
-  // User disapproval
+  // User disapproval - Enhanced with required comment
   const handleUserDisapprove = async () => {
     try {
       setIsSubmitting(true)
-      await disapproveSharePoint(documentId, disapprovalNote)
+      await disapproveSharePoint(documentId, disapprovalNote.trim())
       toast({
         title: "Document Disapproved",
         description: "You have disapproved this document. The document has been cancelled.",
@@ -311,11 +311,11 @@ export default function SharePointDetailEnhanced({
     }
   }
 
-  // Manager rejection with note
+  // Manager rejection with required comment - Enhanced
   const handleManagerReject = async () => {
     try {
       setIsSubmitting(true)
-      await approveSharePoint(documentId, false, disapprovalNote) // false = reject, with note
+      await approveSharePoint(documentId, false, disapprovalNote.trim())
       toast({
         title: "Document Rejected",
         description: "You have rejected this document.",
@@ -335,16 +335,18 @@ export default function SharePointDetailEnhanced({
     }
   }
 
+  // Relaunch with comment - Enhanced
   const handleRelaunch = async () => {
     try {
       setIsSubmitting(true)
-      await relaunchSharePoint(documentId)
+      await relaunchSharePoint(documentId, relaunchComment.trim())
       toast({
         title: "Document Relaunched",
         description: "The document has been sent back to managers for re-approval.",
       })
       loadSharePointDetails()
       setShowRelaunchDialog(false)
+      setRelaunchComment("")
     } catch (err) {
       console.error("Error relaunching document:", err)
       toast({
@@ -379,56 +381,372 @@ export default function SharePointDetailEnhanced({
     }
   }
 
-  // New function to handle PDF generation of the history tab
+  // Enhanced function to handle PDF generation of the complete document history
   const handlePrintHistoryAsPDF = () => {
-    const historyElement = document.getElementById("history-content")
-    if (!historyElement) {
+    const opt = {
+      margin: [15, 15, 15, 15],
+      filename: `SharePoint_Complete_Report_${sharePoint.title.replace(/[^a-zA-Z0-9]/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        letterRendering: true,
+        allowTaint: false,
+      },
+      jsPDF: {
+        unit: "mm",
+        format: "a4",
+        orientation: "portrait",
+        compress: true,
+      },
+    }
+
+    // Create comprehensive PDF content
+    const createPDFContent = () => {
+      const container = document.createElement("div")
+      container.style.cssText = `
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 100%;
+      padding: 20px;
+      background: white;
+    `
+
+      // Header Section
+      const header = document.createElement("div")
+      header.style.cssText = `
+      text-align: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 3px solid #2563eb;
+    `
+      header.innerHTML = `
+      <h1 style="color: #1e40af; margin: 0 0 10px 0; font-size: 28px; font-weight: bold;">
+        SharePoint Document Report
+      </h1>
+      <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 20px; font-weight: 600;">
+        ${sharePoint.title}
+      </h2>
+      <div style="background: #f3f4f6; padding: 10px; border-radius: 8px; display: inline-block;">
+        <p style="margin: 0; font-size: 14px; color: #6b7280;">
+          <strong>Document ID:</strong> ${sharePoint._id}<br>
+          <strong>Generated:</strong> ${new Date().toLocaleString()}<br>
+          <strong>Status:</strong> <span style="color: ${sharePoint.status === "completed" ? "#059669" : sharePoint.status === "rejected" || sharePoint.status === "disapproved" ? "#dc2626" : "#d97706"}; font-weight: bold; text-transform: uppercase;">${sharePoint.status.replace("_", " ")}</span>
+        </p>
+      </div>
+    `
+
+      // Document Overview Section
+      const overview = document.createElement("div")
+      overview.style.cssText = `
+      margin-bottom: 25px;
+      padding: 20px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border-left: 4px solid #3b82f6;
+    `
+      overview.innerHTML = `
+      <h3 style="color: #1e40af; margin: 0 0 15px 0; font-size: 18px; font-weight: bold;">
+        📋 Document Overview
+      </h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div>
+          <p style="margin: 8px 0;"><strong>Created By:</strong> ${sharePoint.createdBy?.username || "Unknown"}</p>
+          <p style="margin: 8px 0;"><strong>Creation Date:</strong> ${formatDate(sharePoint.creationDate)}</p>
+          <p style="margin: 8px 0;"><strong>Deadline:</strong> ${formatDate(sharePoint.deadline)}</p>
+          <p style="margin: 8px 0;"><strong>SharePoint Link:</strong> <span style="font-size: 12px; word-break: break-all;">${sharePoint.link}</span></p>
+        </div>
+        <div>
+          <p style="margin: 8px 0;"><strong>Total Signers:</strong> ${sharePoint.usersToSign?.length || 0}</p>
+          <p style="margin: 8px 0;"><strong>Completed Signatures:</strong> ${sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0}</p>
+          <p style="margin: 8px 0;"><strong>Completion:</strong> ${completionPercentage}%</p>
+          <p style="margin: 8px 0;"><strong>Manager Approved:</strong> ${hasManagerApproved ? "✅ Yes" : "❌ No"}</p>
+        </div>
+      </div>
+      ${
+        sharePoint.comment
+          ? `
+        <div style="margin-top: 15px; padding: 12px; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
+          <strong>Creation Comment:</strong><br>
+          <span style="font-style: italic;">"${sharePoint.comment}"</span>
+        </div>
+      `
+          : ""
+      }
+    `
+
+      // Manager Approval Section
+      const managerSection = document.createElement("div")
+      managerSection.style.cssText = `
+      margin-bottom: 25px;
+      padding: 20px;
+      background: ${hasManagerApproved ? "#ecfdf5" : "#fef3c7"};
+      border-radius: 8px;
+      border-left: 4px solid ${hasManagerApproved ? "#10b981" : "#f59e0b"};
+    `
+      managerSection.innerHTML = `
+      <h3 style="color: ${hasManagerApproved ? "#065f46" : "#92400e"}; margin: 0 0 15px 0; font-size: 18px; font-weight: bold;">
+        ${hasManagerApproved ? "✅" : "⏳"} Manager Approval Status
+      </h3>
+      ${
+        hasManagerApproved
+          ? `
+        <p style="margin: 8px 0;"><strong>Approved By:</strong> ${sharePoint.approvedBy?.username || "Unknown Manager"}</p>
+        <p style="margin: 8px 0;"><strong>Approval Date:</strong> ${formatDate(sharePoint.approvedAt)}</p>
+        ${
+          sharePoint.updateHistory?.find((entry) => entry.action === "approved" && entry.comment)?.comment
+            ? `
+          <div style="margin-top: 12px; padding: 12px; background: white; border-radius: 6px; border: 1px solid #d1fae5;">
+            <strong>Manager's Approval Comment:</strong><br>
+            <span style="font-style: italic;">"${sharePoint.updateHistory.find((entry) => entry.action === "approved" && entry.comment)?.comment}"</span>
+          </div>
+        `
+            : ""
+        }
+      `
+          : `
+        <p style="margin: 8px 0; color: #92400e;"><strong>Status:</strong> Pending manager approval</p>
+        <p style="margin: 8px 0;"><strong>Assigned Managers:</strong> ${sharePoint.managersToApprove?.length || 0}</p>
+      `
+      }
+    `
+
+      // User Signatures Section
+      const signaturesSection = document.createElement("div")
+      signaturesSection.style.cssText = `
+      margin-bottom: 25px;
+      padding: 20px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border-left: 4px solid #8b5cf6;
+    `
+      let signaturesHTML = `
+      <h3 style="color: #5b21b6; margin: 0 0 15px 0; font-size: 18px; font-weight: bold;">
+        👥 User Signatures (${sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0}/${sharePoint.usersToSign?.length || 0})
+      </h3>
+    `
+
+      sharePoint.usersToSign?.forEach((signer, index) => {
+        const status = signer.hasSigned ? "✅ Approved" : signer.hasDisapproved ? "❌ Disapproved" : "⏳ Pending"
+        const statusColor = signer.hasSigned ? "#059669" : signer.hasDisapproved ? "#dc2626" : "#d97706"
+
+        signaturesHTML += `
+        <div style="margin: 12px 0; padding: 15px; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong>${signer.user?.username || "Unknown User"}</strong>
+            <span style="color: ${statusColor}; font-weight: bold;">${status}</span>
+          </div>
+          <p style="margin: 4px 0; font-size: 14px; color: #6b7280;">${signer.user?.email || "No email"}</p>
+          ${
+            signer.hasSigned
+              ? `
+            <p style="margin: 4px 0; font-size: 14px;"><strong>Signed:</strong> ${formatDate(signer.signedAt)}</p>
+            ${
+              signer.signatureNote
+                ? `
+              <div style="margin-top: 8px; padding: 8px; background: #ecfdf5; border-radius: 4px; border-left: 3px solid #10b981;">
+                <strong>Approval Comment:</strong><br>
+                <span style="font-style: italic;">"${signer.signatureNote}"</span>
+              </div>
+            `
+                : ""
+            }
+          `
+              : signer.hasDisapproved
+                ? `
+            <p style="margin: 4px 0; font-size: 14px;"><strong>Disapproved:</strong> ${formatDate(signer.disapprovedAt)}</p>
+            ${
+              signer.disapprovalNote
+                ? `
+              <div style="margin-top: 8px; padding: 8px; background: #fef2f2; border-radius: 4px; border-left: 3px solid #ef4444;">
+                <strong>Disapproval Reason:</strong><br>
+                <span style="font-style: italic;">"${signer.disapprovalNote}"</span>
+              </div>
+            `
+                : ""
+            }
+          `
+                : ""
+          }
+        </div>
+      `
+      })
+      signaturesSection.innerHTML = signaturesHTML
+
+      // Comments Timeline Section
+      const commentsSection = document.createElement("div")
+      commentsSection.style.cssText = `
+      margin-bottom: 25px;
+      padding: 20px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border-left: 4px solid #ec4899;
+    `
+
+      const allComments = getAllComments()
+      let commentsHTML = `
+      <h3 style="color: #be185d; margin: 0 0 15px 0; font-size: 18px; font-weight: bold;">
+        💬 Comments Timeline (${allComments.length})
+      </h3>
+    `
+
+      if (allComments.length === 0) {
+        commentsHTML += `<p style="color: #6b7280; font-style: italic;">No comments available.</p>`
+      } else {
+        allComments.forEach((comment, index) => {
+          const bgColor =
+            comment.type === "creation"
+              ? "#dbeafe"
+              : comment.type === "manager_approval"
+                ? "#d1fae5"
+                : comment.type === "approval_note"
+                  ? "#ecfdf5"
+                  : comment.type === "disapproval_note" || comment.type === "manager_rejection"
+                    ? "#fef2f2"
+                    : comment.type === "relaunch"
+                      ? "#dbeafe"
+                      : "#f3f4f6"
+
+          commentsHTML += `
+          <div style="margin: 12px 0; padding: 15px; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div>
+                <strong>${comment.author?.username || "Unknown User"}</strong>
+                <span style="background: ${bgColor}; color: #374151; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-left: 8px; font-weight: 500;">
+                  ${comment.type.replace("_", " ").toUpperCase()}
+                </span>
+              </div>
+              <span style="font-size: 12px; color: #6b7280;">${formatDate(comment.timestamp)}</span>
+            </div>
+            <div style="padding: 8px; background: ${bgColor}; border-radius: 4px; border-left: 3px solid #6b7280;">
+              <span style="font-style: italic;">"${comment.comment}"</span>
+            </div>
+          </div>
+        `
+        })
+      }
+      commentsSection.innerHTML = commentsHTML
+
+      // Complete History Section
+      const historySection = document.createElement("div")
+      historySection.style.cssText = `
+      margin-bottom: 25px;
+      padding: 20px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border-left: 4px solid #059669;
+    `
+
+      let historyHTML = `
+      <h3 style="color: #065f46; margin: 0 0 15px 0; font-size: 18px; font-weight: bold;">
+        📜 Complete Action History (${sharePoint.updateHistory?.length || 0} events)
+      </h3>
+    `
+
+      sharePoint.updateHistory?.forEach((event, index) => {
+        const actionColor =
+          event.action === "created" || event.action === "signed" || event.action === "approved"
+            ? "#059669"
+            : event.action === "rejected" || event.action === "disapproved"
+              ? "#dc2626"
+              : event.action === "relaunched"
+                ? "#2563eb"
+                : "#6b7280"
+
+        historyHTML += `
+        <div style="margin: 12px 0; padding: 15px; background: white; border-radius: 6px; border: 1px solid #e5e7eb; position: relative;">
+          ${
+            index !== sharePoint.updateHistory.length - 1
+              ? `
+            <div style="position: absolute; left: 8px; top: 45px; bottom: -12px; width: 2px; background: #e5e7eb;"></div>
+          `
+              : ""
+          }
+          <div style="position: absolute; left: 2px; top: 20px; width: 14px; height: 14px; background: ${actionColor}; border-radius: 50%; border: 3px solid white;"></div>
+          <div style="margin-left: 25px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <strong style="color: ${actionColor}; text-transform: capitalize;">${event.action.replace("_", " ")}</strong>
+              <span style="font-size: 12px; color: #6b7280;">${formatDate(event.timestamp)}</span>
+            </div>
+            <p style="margin: 4px 0; color: #374151;">${event.details}</p>
+            <p style="margin: 4px 0; font-size: 14px; color: #6b7280;">
+              <strong>Performed by:</strong> ${event.performedBy?.username || "Unknown user"}
+            </p>
+            ${
+              event.comment
+                ? `
+              <div style="margin-top: 8px; padding: 8px; background: #f9fafb; border-radius: 4px; border-left: 3px solid ${actionColor};">
+                <strong>Comment:</strong><br>
+                <span style="font-style: italic;">"${event.comment}"</span>
+              </div>
+            `
+                : ""
+            }
+          </div>
+        </div>
+      `
+      })
+      historySection.innerHTML = historyHTML
+
+      // Footer Section
+      const footer = document.createElement("div")
+      footer.style.cssText = `
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 2px solid #e5e7eb;
+      text-align: center;
+      color: #6b7280;
+      font-size: 12px;
+    `
+      footer.innerHTML = `
+      <p style="margin: 0;">
+        This report was generated automatically from the SharePoint Document Management System<br>
+        Generated on: ${new Date().toLocaleString()} | Document ID: ${sharePoint._id}
+      </p>
+    `
+
+      // Assemble all sections
+      container.appendChild(header)
+      container.appendChild(overview)
+      container.appendChild(managerSection)
+      container.appendChild(signaturesSection)
+      container.appendChild(commentsSection)
+      container.appendChild(historySection)
+      container.appendChild(footer)
+
+      return container
+    }
+
+    try {
+      const pdfContent = createPDFContent()
+
+      html2pdf()
+        .set(opt)
+        .from(pdfContent)
+        .save()
+        .then(() => {
+          toast({
+            title: "PDF Generated Successfully",
+            description: "Complete SharePoint document report has been downloaded.",
+          })
+        })
+        .catch((err) => {
+          console.error("Error generating PDF:", err)
+          toast({
+            variant: "destructive",
+            title: "PDF Generation Failed",
+            description: "Failed to generate the document report. Please try again.",
+          })
+        })
+    } catch (error) {
+      console.error("Error creating PDF content:", error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "History content not found.",
+        description: "Failed to prepare document content for PDF generation.",
       })
-      return
     }
-
-    const opt = {
-      margin: [10, 10, 10, 10], // top, right, bottom, left in mm
-      filename: `SharePoint_History_${sharePoint._id}.pdf`,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-    }
-
-    // Create a clone of the history content to avoid modifying the original DOM
-    const clone = historyElement.cloneNode(true)
-    const container = document.createElement("div")
-    container.style.padding = "20px"
-    container.style.backgroundColor = "#fff"
-    container.appendChild(clone)
-
-    // Add a header to the PDF
-    const header = document.createElement("div")
-    header.style.textAlign = "center"
-    header.style.marginBottom = "20px"
-    header.innerHTML = `
-      <h1 style="font-size: 20px; color: #333;">SharePoint Document History</h1>
-      <p style="font-size: 14px; color: #666;">Document: ${sharePoint.title}</p>
-      <p style="font-size: 12px; color: #666;">ID: ${sharePoint._id}</p>
-    `
-    container.prepend(header)
-
-    html2pdf()
-      .set(opt)
-      .from(container)
-      .save()
-      .catch((err) => {
-        console.error("Error generating PDF:", err)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to generate PDF. Please try again.",
-        })
-      })
   }
 
   const getStatusColor = (status) => {
@@ -530,7 +848,7 @@ export default function SharePointDetailEnhanced({
       }
     }
 
-    // Add all history comments (including manager rejections)
+    // Add all history comments (including manager rejections and relaunch comments)
     sharePoint.updateHistory?.forEach((entry, index) => {
       if (entry.comment) {
         let icon, bgColor, borderColor, textColor
@@ -824,14 +1142,17 @@ export default function SharePointDetailEnhanced({
                               </DialogHeader>
                               <div className="mt-4 space-y-4">
                                 <div className="space-y-2">
-                                  <Label htmlFor="manager-approval-note">Manager Approval Note (optional)</Label>
+                                  <Label htmlFor="manager-approval-note">Manager Approval Comment</Label>
                                   <Textarea
                                     id="manager-approval-note"
-                                    placeholder="Add any comments about your approval..."
+                                    placeholder="Add any comments about your approval (optional)..."
                                     value={managerApprovalNote}
                                     onChange={(e) => setManagerApprovalNote(e.target.value)}
                                     className="min-h-[100px]"
                                   />
+                                  <p className="text-xs text-muted-foreground">
+                                    Your comment will be visible to all users and saved in the document history.
+                                  </p>
                                 </div>
                               </div>
                               <DialogFooter>
@@ -874,6 +1195,9 @@ export default function SharePointDetailEnhanced({
                                     className="min-h-[100px]"
                                     required
                                   />
+                                  <p className="text-xs text-muted-foreground">
+                                    Your comment will be visible to the creator and saved in the document history.
+                                  </p>
                                 </div>
                               </div>
                               <DialogFooter>
@@ -926,14 +1250,17 @@ export default function SharePointDetailEnhanced({
                                     </p>
                                   </div>
                                   <div className="space-y-2">
-                                    <Label htmlFor="approval-note">Add a note (optional)</Label>
+                                    <Label htmlFor="approval-note">Add a comment</Label>
                                     <Textarea
                                       id="approval-note"
-                                      placeholder="Add any comments about your approval..."
+                                      placeholder="Add any comments about your approval (optional)..."
                                       value={approvalNote}
                                       onChange={(e) => setApprovalNote(e.target.value)}
                                       className="min-h-[100px]"
                                     />
+                                    <p className="text-xs text-muted-foreground">
+                                      Your comment will be visible to managers and saved in the document history.
+                                    </p>
                                   </div>
                                 </div>
                                 <DialogFooter>
@@ -990,7 +1317,8 @@ export default function SharePointDetailEnhanced({
                                       required
                                     />
                                     <p className="text-xs text-muted-foreground">
-                                      Your feedback will help the creator understand what needs to be improved.
+                                      Your feedback will help the creator understand what needs to be improved and will
+                                      be saved in the document history.
                                     </p>
                                   </div>
                                 </div>
@@ -1047,6 +1375,19 @@ export default function SharePointDetailEnhanced({
                                     <li>• Users can approve again once re-approved by manager</li>
                                     <li>• History will be preserved</li>
                                   </ul>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="relaunch-comment">Relaunch Comment</Label>
+                                  <Textarea
+                                    id="relaunch-comment"
+                                    placeholder="Explain what changes you've made or why you're relaunching this document (optional)..."
+                                    value={relaunchComment}
+                                    onChange={(e) => setRelaunchComment(e.target.value)}
+                                    className="min-h-[100px]"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    Your comment will be visible to managers and saved in the document history.
+                                  </p>
                                 </div>
                               </div>
                               <DialogFooter>
@@ -1239,7 +1580,7 @@ export default function SharePointDetailEnhanced({
 
                         {sharePoint.comment && (
                           <div className="space-y-2">
-                            <h3 className="text-sm font-medium text-muted-foreground">Comments</h3>
+                            <h3 className="text-sm font-medium text-muted-foreground">Creation Comments</h3>
                             <div className="p-4 border rounded-lg bg-muted">
                               <p className="text-sm whitespace-pre-wrap">{sharePoint.comment}</p>
                             </div>
@@ -1348,7 +1689,7 @@ export default function SharePointDetailEnhanced({
                                       <MessageSquare className="w-4 h-4 mt-0.5 text-muted-foreground" />
                                       <div>
                                         <p className="mb-1 text-sm font-medium">
-                                          {signer.hasSigned ? "Approval Note:" : "Disapproval Reason:"}
+                                          {signer.hasSigned ? "Approval Comment:" : "Disapproval Reason:"}
                                         </p>
                                         <p className="text-sm">{signer.signatureNote || signer.disapprovalNote}</p>
                                       </div>
@@ -1377,7 +1718,8 @@ export default function SharePointDetailEnhanced({
                           )}
                         </CardTitle>
                         <CardDescription>
-                          Complete timeline of all comments, notes, and feedback from all participants
+                          Complete timeline of all comments, notes, and feedback from all participants including manager
+                          approvals/rejections, user approvals/disapprovals, and relaunch comments
                           {(isSelectedManager || activeUser?.roles?.includes("Admin")) &&
                             " (Manager/Admin view shows all comments including approvals and disapprovals)"}
                         </CardDescription>
@@ -1389,7 +1731,8 @@ export default function SharePointDetailEnhanced({
                               <MessageSquare className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
                               <h3 className="mb-2 text-lg font-medium">No Comments Yet</h3>
                               <p className="text-muted-foreground">
-                                Comments and notes from approvals, disapprovals, and updates will appear here.
+                                Comments and notes from approvals, disapprovals, rejections, and relaunches will appear
+                                here.
                               </p>
                             </div>
                           ) : (

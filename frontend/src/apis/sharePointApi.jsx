@@ -75,14 +75,19 @@ export const deleteSharePoint = (id) => {
   return apiRequest("DELETE", `${BASE_URL}/${id}`)
 }
 
-// Sign a SharePoint document
+// Enhanced: Sign a SharePoint document with optional comment
 export const signSharePoint = (id, signatureNote = "") => {
-  return apiRequest("POST", `${BASE_URL}/${id}/sign`, { signatureNote })
+  return apiRequest("POST", `${BASE_URL}/${id}/sign`, {
+    signatureNote: signatureNote.trim(),
+  })
 }
 
-// Approve SharePoint document (Manager only)
-export const approveSharePoint = (id, approved = true) => {
-  return apiRequest("POST", `${BASE_URL}/${id}/approve`, { approved })
+// Enhanced: Approve SharePoint document (Manager only) with optional comment
+export const approveSharePoint = (id, approved = true, approvalNote = "") => {
+  return apiRequest("POST", `${BASE_URL}/${id}/approve`, {
+    approved,
+    approvalNote: approvalNote.trim(),
+  })
 }
 
 // Get SharePoints assigned to current user with enhanced filtering
@@ -119,6 +124,23 @@ export const getMyCreatedSharePoints = (filters = {}) => {
   return apiRequest("GET", url)
 }
 
+// Get SharePoints needing approval from current user (Manager)
+export const getMyApprovalSharePoints = (filters = {}) => {
+  const queryParams = new URLSearchParams()
+
+  if (filters.status) queryParams.append("status", filters.status)
+  if (filters.page) queryParams.append("page", filters.page)
+  if (filters.limit) queryParams.append("limit", filters.limit)
+  if (filters.sortBy) queryParams.append("sortBy", filters.sortBy)
+  if (filters.sortOrder) queryParams.append("sortOrder", filters.sortOrder)
+  if (filters.search) queryParams.append("search", filters.search)
+
+  const queryString = queryParams.toString()
+  const url = queryString ? `${BASE_URL}/my-approvals?${queryString}` : `${BASE_URL}/my-approvals`
+
+  return apiRequest("GET", url)
+}
+
 // Fallback function to get all users if role-based endpoint doesn't work
 export const getAllUsersForSelection = (page = 1, pageSize = 100) => {
   return getAdminUsers(page, pageSize)
@@ -135,17 +157,21 @@ export const canUserSign = async (sharePointId, userId) => {
   }
 }
 
-// Disapprove a SharePoint document
+// Enhanced: Disapprove a SharePoint document with required comment
 export const disapproveSharePoint = (id, disapprovalNote) => {
   if (!disapprovalNote || !disapprovalNote.trim()) {
     return Promise.reject(new Error("Disapproval note is required"))
   }
-  return apiRequest("POST", `${BASE_URL}/${id}/disapprove`, { disapprovalNote })
+  return apiRequest("POST", `${BASE_URL}/${id}/disapprove`, {
+    disapprovalNote: disapprovalNote.trim(),
+  })
 }
 
-// Relaunch a disapproved SharePoint document
-export const relaunchSharePoint = (id) => {
-  return apiRequest("POST", `${BASE_URL}/${id}/relaunch`)
+// Enhanced: Relaunch a disapproved SharePoint document with optional comment
+export const relaunchSharePoint = (id, relaunchComment = "") => {
+  return apiRequest("POST", `${BASE_URL}/${id}/relaunch`, {
+    relaunchComment: relaunchComment.trim(),
+  })
 }
 
 // Get SharePoint statistics

@@ -15,24 +15,8 @@ import { Progress } from "@/components/ui/progress"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
-import {
-  Calendar,
-  Users,
-  FileText,
-  LinkIcon,
-  AlertCircle,
-  CheckCircle2,
-  Send,
-  X,
-  ArrowLeft,
-  Clock,
-  Target,
-  MessageSquare,
-  Check,
-  ChevronsUpDown,
-  Loader2,
-  Shield,
-} from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Calendar, Users, FileText, LinkIcon, AlertCircle, CheckCircle2, Send, X, ArrowLeft, Clock, Target, MessageSquare, Check, ChevronsUpDown, Loader2, Shield, Search } from 'lucide-react'
 import { createSharePoint } from "../apis/sharePointApi"
 import { getAllUsers } from "../apis/admin"
 import { toast } from "@/hooks/use-toast"
@@ -187,9 +171,9 @@ export default function SharePointCreateEnhanced() {
     const searchTermLower = managerSearchTerm.toLowerCase()
     const filtered = managers.filter(
       (manager) =>
-        manager.username?.toLowerCase().includes(managerSearchTerm) ||
-        manager.email?.toLowerCase().includes(managerSearchTerm) ||
-        manager.roles?.some((role) => role.toLowerCase().includes(managerSearchTerm)),
+        manager.username?.toLowerCase().includes(searchTermLower) ||
+        manager.email?.toLowerCase().includes(searchTermLower) ||
+        manager.roles?.some((role) => role.toLowerCase().includes(searchTermLower)),
     )
     setFilteredManagers(filtered)
   }, [managerSearchTerm, managers])
@@ -202,19 +186,14 @@ export default function SharePointCreateEnhanced() {
       const response = await getAllUsers(1, 1000)
       const users = response.users || []
 
-      // Filter managers (users with manager roles) - Fixed logic
+      // Filter managers (users with manager roles)
       const managerRoles = ["Admin", "Manager", "Project Manager", "Business Manager", "Department Manager"]
       const managerUsers = users.filter((user) => {
-        // Check if user has ANY manager role
         return user.roles && user.roles.some((role) => managerRoles.includes(role))
       })
 
       console.log("All users:", users.length)
       console.log("Manager users found:", managerUsers.length)
-      console.log(
-        "Manager users:",
-        managerUsers.map((u) => ({ username: u.username, roles: u.roles })),
-      )
 
       setAllUsers(users)
       setManagers(managerUsers)
@@ -300,7 +279,7 @@ export default function SharePointCreateEnhanced() {
     if (errors.managers) {
       setErrors((prev) => ({ ...prev, managers: "" }))
     }
-    setShowManagerSelector(false) // Close selector after selection
+    setShowManagerSelector(false)
   }
 
   const nextStep = () => {
@@ -336,7 +315,6 @@ export default function SharePointCreateEnhanced() {
       }
 
       console.log("Submitting data:", submitData)
-      console.log("Selected managers:", selectedManager)
 
       await createSharePoint(submitData)
 
@@ -364,7 +342,22 @@ export default function SharePointCreateEnhanced() {
     }
   }
 
-  const handleBack = () => {
+  const handleCancel = () => {
+    // Clear all form data and state
+    setFormData({
+      title: "",
+      link: "",
+      comment: "",
+      deadline: "",
+    })
+    setSelectedUsers([])
+    setSelectedManager(null)
+    setCurrentStep(0)
+    setErrors({})
+    setApiError("")
+    setSubmitSuccess(false)
+    
+    // Navigate back to SharePoint list
     navigate("/sharepoint")
   }
 
@@ -415,133 +408,179 @@ export default function SharePointCreateEnhanced() {
     </div>
   )
 
+  // Enhanced User Selector with better table view
   const UserSelector = () => (
-    <Popover open={showUserSelector} onOpenChange={setShowUserSelector}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={showUserSelector}
-          className="justify-between w-full bg-transparent"
-        >
-          {selectedUsers.length > 0
-            ? `${selectedUsers.length} user${selectedUsers.length > 1 ? "s" : ""} selected`
-            : "Select users to sign..."}
-          <ChevronsUpDown className="w-4 h-4 ml-2 opacity-50 shrink-0" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search users..." value={searchTerm} onValueChange={setSearchTerm} />
-          <CommandEmpty>No users found.</CommandEmpty>
-          <CommandList>
-            <CommandGroup>
-              <ScrollArea className="h-64">
+    <div className="space-y-4">
+      <div className="relative">
+        <Search className="absolute w-4 h-4 left-3 top-3 text-muted-foreground" />
+        <Input
+          placeholder="Search users by name, email, or role..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+      
+      <div className="border rounded-lg">
+        <div className="p-4 border-b bg-muted/50">
+          <div className="flex items-center justify-between">
+            <h4 className="font-medium">Available Users ({filteredUsers.length})</h4>
+            <div className="text-sm text-muted-foreground">
+              {selectedUsers.length} selected
+            </div>
+          </div>
+        </div>
+        
+        <ScrollArea className="h-64">
+          <div className="p-2">
+            {filteredUsers.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-muted-foreground">
+                <div className="text-center">
+                  <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No users found</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
                 {filteredUsers.map((user) => {
                   const isSelected = selectedUsers.find((u) => u._id === user._id)
                   return (
-                    <CommandItem
+                    <div
                       key={user._id}
-                      onSelect={() => handleUserToggle(user)}
-                      className="flex items-center gap-2 p-2"
+                      className={cn(
+                        "flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors",
+                        isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50"
+                      )}
+                      onClick={() => handleUserToggle(user)}
                     >
-                      <div
-                        className={cn(
-                          "flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                          isSelected ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible",
-                        )}
-                      >
-                        <Check className="w-3 h-3" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{user.username}</p>
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                      <Checkbox
+                        checked={!!isSelected}
+                        onChange={() => handleUserToggle(user)}
+                        className="pointer-events-none"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10">
+                            <span className="text-sm font-medium text-primary">
+                              {user.username?.charAt(0)?.toUpperCase() || 'U'}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{user.username}</p>
+                            <p className="text-xs truncate text-muted-foreground">{user.email}</p>
+                          </div>
+                        </div>
                         {user.roles && user.roles.length > 0 && (
-                          <div className="flex gap-1 mt-1">
+                          <div className="flex gap-1 mt-2">
                             {user.roles.slice(0, 2).map((role) => (
                               <Badge key={role} variant="secondary" className="text-xs">
                                 {role}
                               </Badge>
                             ))}
+                            {user.roles.length > 2 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{user.roles.length - 2}
+                              </Badge>
+                            )}
                           </div>
                         )}
                       </div>
-                    </CommandItem>
+                    </div>
                   )
                 })}
-              </ScrollArea>
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    </div>
   )
 
+  // Enhanced Manager Selector with better table view
   const ManagerSelector = () => (
-    <Popover open={showManagerSelector} onOpenChange={setShowManagerSelector}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={showManagerSelector}
-          className="justify-between w-full bg-transparent"
-        >
-          {selectedManager ? selectedManager.username : "Select a manager to approve..."}
-          <ChevronsUpDown className="w-4 h-4 ml-2 opacity-50 shrink-0" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
-        <Command>
-          <CommandInput
-            placeholder="Search managers..."
-            value={managerSearchTerm}
-            onValueChange={setManagerSearchTerm}
-          />
-          <CommandEmpty>No managers found.</CommandEmpty>
-          <CommandList>
-            <CommandGroup>
-              <ScrollArea className="h-64">
+    <div className="space-y-4">
+      <div className="relative">
+        <Search className="absolute w-4 h-4 left-3 top-3 text-muted-foreground" />
+        <Input
+          placeholder="Search managers by name, email, or role..."
+          value={managerSearchTerm}
+          onChange={(e) => setManagerSearchTerm(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+      
+      <div className="border rounded-lg">
+        <div className="p-4 border-b bg-muted/50">
+          <div className="flex items-center justify-between">
+            <h4 className="font-medium">Available Managers ({filteredManagers.length})</h4>
+            <div className="text-sm text-muted-foreground">
+              {selectedManager ? '1 selected' : 'None selected'}
+            </div>
+          </div>
+        </div>
+        
+        <ScrollArea className="h-64">
+          <div className="p-2">
+            {filteredManagers.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-muted-foreground">
+                <div className="text-center">
+                  <Shield className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No managers found</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
                 {filteredManagers.map((manager) => {
                   const isSelected = selectedManager?._id === manager._id
                   return (
-                    <CommandItem
+                    <div
                       key={manager._id}
-                      onSelect={() => handleManagerSelect(manager)}
-                      className="flex items-center gap-2 p-2"
+                      className={cn(
+                        "flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors",
+                        isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50"
+                      )}
+                      onClick={() => handleManagerSelect(manager)}
                     >
-                      <div
-                        className={cn(
-                          "flex h-4 w-4 items-center justify-center rounded-full border border-primary",
-                          isSelected ? "bg-primary text-primary-foreground" : "opacity-50",
-                        )}
-                      >
-                        {isSelected && <div className="w-2 h-2 bg-current rounded-full" />}
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2 border-primary flex items-center justify-center",
+                        isSelected ? "bg-primary" : "bg-transparent"
+                      )}>
+                        {isSelected && <div className="w-2 h-2 bg-white rounded-full" />}
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <Shield className="w-3 h-3 text-blue-600" />
-                          <p className="text-sm font-medium">{manager.username}</p>
+                          <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
+                            <Shield className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{manager.username}</p>
+                            <p className="text-xs truncate text-muted-foreground">{manager.email}</p>
+                          </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">{manager.email}</p>
                         {manager.roles && manager.roles.length > 0 && (
-                          <div className="flex gap-1 mt-1">
+                          <div className="flex gap-1 mt-2">
                             {manager.roles.slice(0, 2).map((role) => (
                               <Badge key={role} variant="secondary" className="text-xs">
                                 {role}
                               </Badge>
                             ))}
+                            {manager.roles.length > 2 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{manager.roles.length - 2}
+                              </Badge>
+                            )}
                           </div>
                         )}
                       </div>
-                    </CommandItem>
+                    </div>
                   )
                 })}
-              </ScrollArea>
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    </div>
   )
 
   return (
@@ -552,7 +591,7 @@ export default function SharePointCreateEnhanced() {
             {/* Header */}
             <motion.div variants={itemVariants} className="flex items-center justify-between">
               <div className="space-y-1">
-                <Button variant="ghost" onClick={handleBack} className="gap-2 mb-2">
+                <Button variant="ghost" onClick={handleCancel} className="gap-2 mb-2">
                   <ArrowLeft className="w-4 h-4" />
                   Back to Documents
                 </Button>
@@ -779,21 +818,15 @@ export default function SharePointCreateEnhanced() {
                         className="space-y-6"
                       >
                         <div className="space-y-2">
-                          <h2 className="text-2xl font-semibold">Select Approvers</h2>
+                          <h2 className="text-2xl font-semibold">Select Approver</h2>
                           <p className="text-muted-foreground">
-                            Choose a manager who must approve this document before users can sign it. Only approved
-                            documents can be signed by assigned users.
+                            Choose a manager who must approve this document before users can sign it.
                           </p>
-                          {/* Debug info */}
-                          <div className="p-2 text-xs bg-gray-100 rounded">
-                            <p>Debug: {managers.length} managers available</p>
-                            <p>Debug: {selectedManager ? "1" : "0"} manager selected</p>
-                          </div>
                         </div>
 
                         <div className="space-y-6">
                           <div className="space-y-2">
-                            <Label className="text-sm font-medium">Managers to Approve *</Label>
+                            <Label className="text-sm font-medium">Manager to Approve *</Label>
                             <ManagerSelector />
                             {errors.managers && (
                               <p className="flex items-center gap-1 text-sm text-destructive">
@@ -801,39 +834,21 @@ export default function SharePointCreateEnhanced() {
                                 {errors.managers}
                               </p>
                             )}
-                            <p className="text-xs text-muted-foreground">
-                              Only users with manager roles (Admin, Manager, Project Manager, Business Manager,
-                              Department Manager) are shown here
-                            </p>
                           </div>
 
-                          {/* Selected Managers */}
+                          {/* Selected Manager Display */}
                           {selectedManager && (
                             <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-sm font-medium">Selected Approver</Label>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setSelectedManager(null)}
-                                  className="h-auto p-1 text-xs"
-                                >
-                                  Clear
-                                </Button>
-                              </div>
-                              <div className="grid gap-2">
-                                <motion.div
-                                  initial={{ opacity: 0, scale: 0.95 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  className="flex items-center justify-between p-3 border border-blue-200 rounded-lg bg-blue-50"
-                                >
+                              <Label className="text-sm font-medium">Selected Approver</Label>
+                              <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
+                                <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-3">
-                                    <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
-                                      <Shield className="w-4 h-4 text-blue-600" />
+                                    <div className="flex items-center justify-center w-10 h-10 bg-blue-100 rounded-full">
+                                      <Shield className="w-5 h-5 text-blue-600" />
                                     </div>
                                     <div>
-                                      <p className="text-sm font-medium">{selectedManager.username}</p>
-                                      <p className="text-xs text-muted-foreground">{selectedManager.email}</p>
+                                      <p className="font-medium">{selectedManager.username}</p>
+                                      <p className="text-sm text-muted-foreground">{selectedManager.email}</p>
                                       <div className="flex gap-1 mt-1">
                                         {selectedManager.roles?.slice(0, 3).map((role) => (
                                           <Badge key={role} variant="secondary" className="text-xs">
@@ -847,11 +862,10 @@ export default function SharePointCreateEnhanced() {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setSelectedManager(null)}
-                                    className="h-auto p-1"
                                   >
                                     <X className="w-4 h-4" />
                                   </Button>
-                                </motion.div>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -888,7 +902,7 @@ export default function SharePointCreateEnhanced() {
                             )}
                           </div>
 
-                          {/* Selected Users */}
+                          {/* Selected Users Display */}
                           {selectedUsers.length > 0 && (
                             <div className="space-y-3">
                               <div className="flex items-center justify-between">
@@ -902,7 +916,6 @@ export default function SharePointCreateEnhanced() {
                                   Clear All
                                 </Button>
                               </div>
-                              \
                               <div className="grid gap-2">
                                 <AnimatePresence>
                                   {selectedUsers.map((user) => (
@@ -1004,7 +1017,7 @@ export default function SharePointCreateEnhanced() {
 
                               <div>
                                 <Label className="text-sm font-medium text-muted-foreground">
-                                  Registered Signers ({selectedUsers.length})
+                                  Signers ({selectedUsers.length})
                                 </Label>
                                 <div className="flex flex-wrap gap-2 mt-2">
                                   {selectedUsers.map((user) => (
@@ -1023,15 +1036,26 @@ export default function SharePointCreateEnhanced() {
 
                   {/* Navigation Buttons */}
                   <div className="flex justify-between pt-8 mt-8 border-t">
-                    <Button
-                      variant="outline"
-                      onClick={prevStep}
-                      disabled={currentStep === 0}
-                      className="flex items-center gap-2 bg-transparent"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                      Previous
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={handleCancel}
+                        className="flex items-center gap-2"
+                      >
+                        <X className="w-4 h-4" />
+                        Cancel
+                      </Button>
+                      {currentStep > 0 && (
+                        <Button
+                          variant="outline"
+                          onClick={prevStep}
+                          className="flex items-center gap-2"
+                        >
+                          <ArrowLeft className="w-4 h-4" />
+                          Previous
+                        </Button>
+                      )}
+                    </div>
 
                     <div className="flex gap-2">
                       {currentStep < steps.length - 1 ? (

@@ -49,12 +49,6 @@ const navigationItems = [
         path: "/sharepoint/create",
       },
       {
-        id: "my-documents",
-        label: "My Documents",
-        icon: User,
-        path: "/sharepoint?filter=created",
-      },
-      {
         id: "assigned-documents",
         label: "Assigned to Me",
         icon: ClipboardCheck,
