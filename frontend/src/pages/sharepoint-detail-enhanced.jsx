@@ -510,7 +510,27 @@ export default function SharePointDetailEnhanced({
       })
     }
 
-    // Add all history comments
+    // Add manager approval note if exists
+    if (sharePoint.managerApproved && sharePoint.approvedBy) {
+      const managerApprovalEntry = sharePoint.updateHistory?.find(
+        (entry) => entry.action === "approved" && entry.performedBy?._id === sharePoint.approvedBy._id,
+      )
+      if (managerApprovalEntry && managerApprovalEntry.comment) {
+        comments.push({
+          id: "manager-approval",
+          type: "manager_approval",
+          comment: managerApprovalEntry.comment,
+          author: sharePoint.approvedBy,
+          timestamp: sharePoint.approvedAt,
+          icon: <Shield className="w-4 h-4" />,
+          bgColor: "bg-emerald-50",
+          borderColor: "border-emerald-200",
+          textColor: "text-emerald-700",
+        })
+      }
+    }
+
+    // Add all history comments (including manager rejections)
     sharePoint.updateHistory?.forEach((entry, index) => {
       if (entry.comment) {
         let icon, bgColor, borderColor, textColor
@@ -522,6 +542,12 @@ export default function SharePointDetailEnhanced({
             borderColor = "border-emerald-200"
             textColor = "text-emerald-700"
             break
+          case "rejected":
+            icon = <XCircle className="w-4 h-4" />
+            bgColor = "bg-red-50"
+            borderColor = "border-red-200"
+            textColor = "text-red-700"
+            break
           case "signed":
             icon = <CheckCircle className="w-4 h-4" />
             bgColor = "bg-green-50"
@@ -530,12 +556,6 @@ export default function SharePointDetailEnhanced({
             break
           case "disapproved":
             icon = <XCircle className="w-4 h-4" />
-            bgColor = "bg-red-50"
-            borderColor = "border-red-200"
-            textColor = "text-red-700"
-            break
-          case "rejected":
-            icon = <AlertTriangle className="w-4 h-4" />
             bgColor = "bg-red-50"
             borderColor = "border-red-200"
             textColor = "text-red-700"
@@ -568,7 +588,7 @@ export default function SharePointDetailEnhanced({
       }
     })
 
-    // Add user signature notes
+    // Add user signature notes (both approval and disapproval)
     sharePoint.usersToSign?.forEach((signer, index) => {
       if (signer.signatureNote) {
         comments.push({
@@ -639,7 +659,7 @@ export default function SharePointDetailEnhanced({
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Go Back
                 </Button>
-                <Button onClick={loadSharePointDetails} variant="outline" className="w-full">
+                <Button onClick={loadSharePointDetails} variant="outline" className="w-full bg-transparent">
                   Try Again
                 </Button>
               </div>
@@ -1001,7 +1021,7 @@ export default function SharePointDetailEnhanced({
                         <div className="flex-1">
                           <Dialog open={showRelaunchDialog} onOpenChange={setShowRelaunchDialog}>
                             <DialogTrigger asChild>
-                              <Button className="w-full" variant="outline">
+                              <Button className="w-full bg-transparent" variant="outline">
                                 <RotateCcw className="w-4 h-4 mr-2" />
                                 Relaunch Document
                               </Button>
@@ -1350,9 +1370,16 @@ export default function SharePointDetailEnhanced({
                         <CardTitle className="flex items-center gap-2">
                           <MessageSquare className="w-5 h-5 text-primary" />
                           All Comments & Notes ({getAllComments().length})
+                          {(isSelectedManager || activeUser?.roles?.includes("Admin")) && (
+                            <Badge variant="outline" className="text-xs">
+                              Manager View - All Comments Visible
+                            </Badge>
+                          )}
                         </CardTitle>
                         <CardDescription>
                           Complete timeline of all comments, notes, and feedback from all participants
+                          {(isSelectedManager || activeUser?.roles?.includes("Admin")) &&
+                            " (Manager/Admin view shows all comments including approvals and disapprovals)"}
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
@@ -1388,6 +1415,11 @@ export default function SharePointDetailEnhanced({
                                           >
                                             {comment.type.replace("_", " ").toUpperCase()}
                                           </Badge>
+                                          {(isSelectedManager || activeUser?.roles?.includes("Admin")) && (
+                                            <Badge variant="secondary" className="text-xs">
+                                              Visible to Managers
+                                            </Badge>
+                                          )}
                                         </div>
                                         <span className="text-xs text-muted-foreground">
                                           {formatDate(comment.timestamp)}
@@ -1714,7 +1746,7 @@ export default function SharePointDetailEnhanced({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full"
+                      className="w-full bg-transparent"
                       onClick={() => {
                         navigator.clipboard.writeText(sharePoint.link)
                         toast({
@@ -1729,7 +1761,7 @@ export default function SharePointDetailEnhanced({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full"
+                      className="w-full bg-transparent"
                       onClick={() => {
                         navigator.clipboard.writeText(sharePoint._id)
                         toast({
@@ -1741,7 +1773,12 @@ export default function SharePointDetailEnhanced({
                       <Copy className="w-4 h-4 mr-2" />
                       Copy Document ID
                     </Button>
-                    <Button variant="outline" size="sm" className="w-full" onClick={handlePrintHistoryAsPDF}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full bg-transparent"
+                      onClick={handlePrintHistoryAsPDF}
+                    >
                       <Download className="w-4 h-4 mr-2" />
                       Export History
                     </Button>
