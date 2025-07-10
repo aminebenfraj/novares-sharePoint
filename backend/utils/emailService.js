@@ -12,24 +12,37 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+
 // Verify transporter connection
 transporter.verify((error, success) => {
   if (error) {
-    console.error("❌ SMTP connection error:", error);
+    console.error("❌ SMTP connection error:", error)
   } else {
-    console.log("✅ SMTP server is ready to send emails");
+    console.log("✅ SMTP server is ready to send emails")
   }
-});
+})
 
 /**
  * Send document creation email to manager for approval/disapproval
  */
 exports.sendManagerApprovalEmail = async (options) => {
   try {
-    const { to, username, documentTitle, documentLink, deadline, createdBy, comment = "", documentId } = options;
+    const { to, username, documentTitle, documentLink, deadline, createdBy, comment = "", documentId } = options
 
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com";
-    const taskUrl = `${baseUrl}/sharepoint/${documentId}`;
+    // 🔧 DEBUG: Log the document ID being used
+    console.log(`📧 Sending manager approval email with document ID: ${documentId}`)
+
+    // 🔧 VALIDATION: Ensure documentId is valid
+    if (!documentId || documentId === "undefined" || documentId === "null") {
+      console.error(`❌ Invalid document ID in manager approval email: ${documentId}`)
+      throw new Error(`Invalid document ID: ${documentId}`)
+    }
+
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
+    const taskUrl = `${baseUrl}/sharepoint/${documentId}`
+
+    // 🔧 DEBUG: Log the final URL
+    console.log(`🔗 Manager approval email URL: ${taskUrl}`)
 
     const formattedDeadline = new Date(deadline).toLocaleDateString("en-US", {
       weekday: "long",
@@ -38,7 +51,7 @@ exports.sendManagerApprovalEmail = async (options) => {
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    });
+    })
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
@@ -74,12 +87,20 @@ exports.sendManagerApprovalEmail = async (options) => {
                   </a>
                 </td>
               </tr>
-              ${comment ? `
+              ${
+                comment
+                  ? `
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #333;">Notes:</td>
                 <td style="padding: 8px 0; color: #666;">${comment}</td>
               </tr>
-              ` : ""}
+              `
+                  : ""
+              }
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #333;">Document ID:</td>
+                <td style="padding: 8px 0; color: #666; font-family: monospace;">${documentId}</td>
+              </tr>
             </table>
           </div>
           <div style="text-align: center; margin: 30px 0;">
@@ -91,38 +112,61 @@ exports.sendManagerApprovalEmail = async (options) => {
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
           <div style="text-align: center;">
             <p style="color: #6c757d; font-size: 12px; margin: 0;">
-              This is an automated notification from the <strong>SharePoint Document Management System</strong>
+              This is an automated notification from the <strong>SharePoint Document Management System</strong><br>
+              Document ID: <code>${documentId}</code>
             </p>
           </div>
         </div>
       </div>
-    `;
+    `
 
     const mailOptions = {
       from: `"SharePoint Document System" <${process.env.EMAIL_USER}>`,
       to,
-      subject: `📋 Document Approval Required: "${documentTitle}"`,
+      subject: `📋 Document Approval Required: "${documentTitle}" (ID: ${documentId})`,
       html: htmlContent,
-    };
+    }
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`📧 Manager approval email sent successfully to ${to}:`, info.messageId);
-    return info;
+    const info = await transporter.sendMail(mailOptions)
+    console.log(`📧 Manager approval email sent successfully to ${to} with document ID ${documentId}:`, info.messageId)
+    return info
   } catch (error) {
-    console.error("❌ Error sending manager approval email:", error);
-    throw error;
+    console.error("❌ Error sending manager approval email:", error)
+    throw error
   }
-};
+}
 
 /**
  * Send document assignment email to users after manager approval
  */
 exports.sendUserSigningEmail = async (options) => {
   try {
-    const { to, username, documentTitle, documentLink, deadline, createdBy, approvedBy, comment = "", documentId } = options;
+    const {
+      to,
+      username,
+      documentTitle,
+      documentLink,
+      deadline,
+      createdBy,
+      approvedBy,
+      comment = "",
+      documentId,
+    } = options
 
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com";
-    const taskUrl = `${baseUrl}/sharepoint/${documentId}`;
+    // 🔧 DEBUG: Log the document ID being used
+    console.log(`📧 Sending user signing email with document ID: ${documentId}`)
+
+    // 🔧 VALIDATION: Ensure documentId is valid
+    if (!documentId || documentId === "undefined" || documentId === "null") {
+      console.error(`❌ Invalid document ID in user signing email: ${documentId}`)
+      throw new Error(`Invalid document ID: ${documentId}`)
+    }
+
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
+    const taskUrl = `${baseUrl}/sharepoint/${documentId}`
+
+    // 🔧 DEBUG: Log the final URL
+    console.log(`🔗 User signing email URL: ${taskUrl}`)
 
     const formattedDeadline = new Date(deadline).toLocaleDateString("en-US", {
       weekday: "long",
@@ -131,7 +175,7 @@ exports.sendUserSigningEmail = async (options) => {
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    });
+    })
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
@@ -171,12 +215,20 @@ exports.sendUserSigningEmail = async (options) => {
                   </a>
                 </td>
               </tr>
-              ${comment ? `
+              ${
+                comment
+                  ? `
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #333;">Notes:</td>
                 <td style="padding: 8px 0; color: #666;">${comment}</td>
               </tr>
-              ` : ""}
+              `
+                  : ""
+              }
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #333;">Document ID:</td>
+                <td style="padding: 8px 0; color: #666; font-family: monospace;">${documentId}</td>
+              </tr>
             </table>
           </div>
           <div style="text-align: center; margin: 30px 0;">
@@ -188,40 +240,51 @@ exports.sendUserSigningEmail = async (options) => {
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
           <div style="text-align: center;">
             <p style="color: #6c757d; font-size: 12px; margin: 0;">
-              This is an automated notification from the <strong>SharePoint Document Management System</strong>
+              This is an automated notification from the <strong>SharePoint Document Management System</strong><br>
+              Document ID: <code>${documentId}</code>
             </p>
           </div>
         </div>
       </div>
-    `;
+    `
 
     const mailOptions = {
       from: `"SharePoint Document System" <${process.env.EMAIL_USER}>`,
       to,
-      subject: `✅ Document Approved - Action Required: "${documentTitle}"`,
+      subject: `✅ Document Approved - Action Required: "${documentTitle}" (ID: ${documentId})`,
       html: htmlContent,
-    };
+    }
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`📧 User signing email sent successfully to ${to}:`, info.messageId);
-    return info;
+    const info = await transporter.sendMail(mailOptions)
+    console.log(`📧 User signing email sent successfully to ${to} with document ID ${documentId}:`, info.messageId)
+    return info
   } catch (error) {
-    console.error("❌ Error sending user signing email:", error);
-    throw error;
+    console.error("❌ Error sending user signing email:", error)
+    throw error
   }
-};
+}
 
-/**
- * Send disapproval notification to creator for relaunch
- */
+// Apply similar fixes to other email functions...
 exports.sendRelaunchNotificationEmail = async (options) => {
   try {
-    const { to, username, documentTitle, documentId, disapprovedBy, disapprovalNote, isManagerDisapproval } = options;
+    const { to, username, documentTitle, documentId, disapprovedBy, disapprovalNote, isManagerDisapproval } = options
 
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com";
-    const documentUrl = `${baseUrl}/sharepoint/${documentId}`;
+    // 🔧 DEBUG: Log the document ID being used
+    console.log(`📧 Sending relaunch notification email with document ID: ${documentId}`)
 
-    const disapprovalType = isManagerDisapproval ? "Manager" : "User";
+    // 🔧 VALIDATION: Ensure documentId is valid
+    if (!documentId || documentId === "undefined" || documentId === "null") {
+      console.error(`❌ Invalid document ID in relaunch notification email: ${documentId}`)
+      throw new Error(`Invalid document ID: ${documentId}`)
+    }
+
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
+    const documentUrl = `${baseUrl}/sharepoint/${documentId}`
+
+    // 🔧 DEBUG: Log the final URL
+    console.log(`🔗 Relaunch notification email URL: ${documentUrl}`)
+
+    const disapprovalType = isManagerDisapproval ? "Manager" : "User"
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
@@ -250,38 +313,51 @@ exports.sendRelaunchNotificationEmail = async (options) => {
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
           <div style="text-align: center;">
             <p style="color: #6c757d; font-size: 12px; margin: 0;">
-              This is an automated notification from the <strong>SharePoint Document Management System</strong>
+              This is an automated notification from the <strong>SharePoint Document Management System</strong><br>
+              Document ID: <code>${documentId}</code>
             </p>
           </div>
         </div>
       </div>
-    `;
+    `
 
     const mailOptions = {
       from: `"SharePoint Document System" <${process.env.EMAIL_USER}>`,
       to,
-      subject: `❌ Document Disapproved - Relaunch Required: "${documentTitle}"`,
+      subject: `❌ Document Disapproved - Relaunch Required: "${documentTitle}" (ID: ${documentId})`,
       html: htmlContent,
-    };
+    }
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`📧 Relaunch notification email sent successfully to ${to}:`, info.messageId);
-    return info;
+    const info = await transporter.sendMail(mailOptions)
+    console.log(
+      `📧 Relaunch notification email sent successfully to ${to} with document ID ${documentId}:`,
+      info.messageId,
+    )
+    return info
   } catch (error) {
-    console.error("❌ Error sending relaunch notification email:", error);
-    throw error;
+    console.error("❌ Error sending relaunch notification email:", error)
+    throw error
   }
-};
+}
 
-/**
- * Send completion notification to creator
- */
 exports.sendCompletionNotificationEmail = async (options) => {
   try {
-    const { to, username, documentTitle, documentId } = options;
+    const { to, username, documentTitle, documentId } = options
 
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com";
-    const documentUrl = `${baseUrl}/sharepoint/${documentId}`;
+    // 🔧 DEBUG: Log the document ID being used
+    console.log(`📧 Sending completion notification email with document ID: ${documentId}`)
+
+    // 🔧 VALIDATION: Ensure documentId is valid
+    if (!documentId || documentId === "undefined" || documentId === "null") {
+      console.error(`❌ Invalid document ID in completion notification email: ${documentId}`)
+      throw new Error(`Invalid document ID: ${documentId}`)
+    }
+
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
+    const documentUrl = `${baseUrl}/sharepoint/${documentId}`
+
+    // 🔧 DEBUG: Log the final URL
+    console.log(`🔗 Completion notification email URL: ${documentUrl}`)
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
@@ -307,77 +383,79 @@ exports.sendCompletionNotificationEmail = async (options) => {
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
           <div style="text-align: center;">
             <p style="color: #6c757d; font-size: 12px; margin: 0;">
-              This is an automated notification from the <strong>SharePoint Document Management System</strong>
+              This is an automated notification from the <strong>SharePoint Document Management System</strong><br>
+              Document ID: <code>${documentId}</code>
             </p>
           </div>
         </div>
       </div>
-    `;
+    `
 
     const mailOptions = {
       from: `"SharePoint Document System" <${process.env.EMAIL_USER}>`,
       to,
-      subject: `🎉 Document Completed: "${documentTitle}"`,
+      subject: `🎉 Document Completed: "${documentTitle}" (ID: ${documentId})`,
       html: htmlContent,
-    };
+    }
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`📧 Completion notification email sent successfully to ${to}:`, info.messageId);
-    return info;
+    const info = await transporter.sendMail(mailOptions)
+    console.log(
+      `📧 Completion notification email sent successfully to ${to} with document ID ${documentId}:`,
+      info.messageId,
+    )
+    return info
   } catch (error) {
-    console.error("❌ Error sending completion notification email:", error);
-    throw error;
+    console.error("❌ Error sending completion notification email:", error)
+    throw error
   }
-};
+}
 
 /**
  * Send bulk emails to multiple recipients
  */
 exports.sendBulkEmails = async (emailList, emailType) => {
   try {
-    console.log(`📧 Sending ${emailList.length} ${emailType} emails...`);
+    console.log(`📧 Sending ${emailList.length} ${emailType} emails...`)
 
-    let sendFunction;
+    let sendFunction
     switch (emailType) {
       case "managerApproval":
-        sendFunction = exports.sendManagerApprovalEmail;
-        break;
+        sendFunction = exports.sendManagerApprovalEmail
+        break
       case "userSigning":
-        sendFunction = exports.sendUserSigningEmail;
-        break;
+        sendFunction = exports.sendUserSigningEmail
+        break
       case "relaunchNotification":
-        sendFunction = exports.sendRelaunchNotificationEmail;
-        break;
+        sendFunction = exports.sendRelaunchNotificationEmail
+        break
       case "completionNotification":
-        sendFunction = exports.sendCompletionNotificationEmail;
-        break;
+        sendFunction = exports.sendCompletionNotificationEmail
+        break
       default:
-        throw new Error(`Unknown email type: ${emailType}`);
+        throw new Error(`Unknown email type: ${emailType}`)
     }
 
-    const results = await Promise.allSettled(
-      emailList.map((emailOptions) => sendFunction(emailOptions))
-    );
+    const results = await Promise.allSettled(emailList.map((emailOptions) => sendFunction(emailOptions)))
 
-    const successful = results.filter((result) => result.status === "fulfilled").length;
-    const failed = results.filter((result) => result.status === "rejected").length;
+    const successful = results.filter((result) => result.status === "fulfilled").length
+    const failed = results.filter((result) => result.status === "rejected").length
 
-    console.log(`✅ Bulk email results: ${successful} successful, ${failed} failed`);
+    console.log(`✅ Bulk email results: ${successful} successful, ${failed} failed`)
 
     results.forEach((result, index) => {
       if (result.status === "rejected") {
-        console.error(`❌ Failed to send ${emailType} email to ${emailList[index].to}:`, result.reason);
+        console.error(`❌ Failed to send ${emailType} email to ${emailList[index].to}:`, result.reason)
       }
-    });
+    })
 
     return {
       total: emailList.length,
       successful,
       failed,
       results,
-    };
+    }
   } catch (error) {
-    console.error(`❌ Error sending bulk ${emailType} emails:`, error);
-    throw error;
+    console.error(`❌ Error sending bulk ${emailType} emails:`, error)
+    throw error
   }
-};
+}

@@ -126,6 +126,10 @@ exports.createSharePoint = async (req, res) => {
       { path: "managersToApprove", select: "username email roles" },
     ])
 
+    // 🔧 FIX: Ensure we use the correct MongoDB _id as string
+    const documentId = sharePoint._id.toString()
+    console.log(`📋 Created SharePoint with ID: ${documentId}`)
+
     // Send email to assigned managers for approval
     try {
       const managerEmailList = selectedManagers.map((manager) => ({
@@ -136,11 +140,11 @@ exports.createSharePoint = async (req, res) => {
         deadline: deadline,
         createdBy: req.user.username,
         comment: comment || "",
-        documentId: sharePoint._id.toString(),
+        documentId: documentId, // 🔧 FIX: Use the correct document ID
       }))
 
       await sendBulkEmails(managerEmailList, "managerApproval")
-      console.log(`📧 Manager approval emails sent successfully`)
+      console.log(`📧 Manager approval emails sent successfully with document ID: ${documentId}`)
     } catch (emailError) {
       console.error("❌ Email notification failed:", emailError)
     }
@@ -174,6 +178,10 @@ exports.approveSharePoint = async (req, res) => {
     if (!sharePoint) {
       return res.status(404).json({ error: "SharePoint not found" })
     }
+
+    // 🔧 FIX: Ensure we use the correct MongoDB _id as string
+    const documentId = sharePoint._id.toString()
+    console.log(`📋 Processing approval for SharePoint ID: ${documentId}`)
 
     const isSelectedManager = sharePoint.managersToApprove.some((managerId) =>
       [String(managerId), String(req.user._id), String(req.user.license)].includes(String(managerId)),
@@ -218,9 +226,9 @@ exports.approveSharePoint = async (req, res) => {
     if (approved) {
       // Send email to assigned users for signing (only to users who haven't signed yet)
       try {
-        const usersToNotify = sharePoint.usersToSign.filter(signer => !signer.hasSigned)
-        
-        const userEmailPromises = usersToNotify.map((signer) => 
+        const usersToNotify = sharePoint.usersToSign.filter((signer) => !signer.hasSigned)
+
+        const userEmailPromises = usersToNotify.map((signer) =>
           sendUserSigningEmail({
             to: signer.user.email,
             username: signer.user.username,
@@ -230,24 +238,25 @@ exports.approveSharePoint = async (req, res) => {
             createdBy: sharePoint.createdBy.username,
             approvedBy: req.user.username,
             comment: sharePoint.comment || "",
-            documentId: sharePoint._id.toString(),
-          })
+            documentId: documentId, // 🔧 FIX: Use the correct document ID
+          }),
         )
 
         const emailResults = await Promise.allSettled(userEmailPromises)
-        
-        const successful = emailResults.filter(result => result.status === 'fulfilled').length
-        const failed = emailResults.filter(result => result.status === 'rejected').length
-        
-        console.log(`📧 User signing notifications: ${successful} successful, ${failed} failed`)
-        
+
+        const successful = emailResults.filter((result) => result.status === "fulfilled").length
+        const failed = emailResults.filter((result) => result.status === "rejected").length
+
+        console.log(
+          `📧 User signing notifications sent with document ID ${documentId}: ${successful} successful, ${failed} failed`,
+        )
+
         // Log any failures
         emailResults.forEach((result, index) => {
-          if (result.status === 'rejected') {
+          if (result.status === "rejected") {
             console.error(`❌ Failed to send email to ${usersToNotify[index].user.email}:`, result.reason)
           }
         })
-        
       } catch (emailError) {
         console.error("❌ Failed to send user signing notifications:", emailError)
       }
@@ -258,12 +267,12 @@ exports.approveSharePoint = async (req, res) => {
           to: sharePoint.createdBy.email,
           username: sharePoint.createdBy.username,
           documentTitle: sharePoint.title,
-          documentId: sharePoint._id.toString(),
+          documentId: documentId, // 🔧 FIX: Use the correct document ID
           disapprovedBy: req.user.username,
           disapprovalNote: approvalNote.trim(),
           isManagerDisapproval: true,
         })
-        console.log(`📧 Relaunch notification sent to creator`)
+        console.log(`📧 Relaunch notification sent to creator with document ID: ${documentId}`)
       } catch (emailError) {
         console.error("❌ Failed to send relaunch notification:", emailError)
       }
@@ -302,6 +311,10 @@ exports.signSharePoint = async (req, res) => {
     if (!sharePoint) {
       return res.status(404).json({ error: "SharePoint not found" })
     }
+
+    // 🔧 FIX: Ensure we use the correct MongoDB _id as string
+    const documentId = sharePoint._id.toString()
+    console.log(`📋 Processing signature for SharePoint ID: ${documentId}`)
 
     if (!sharePoint.managerApproved) {
       return res.status(403).json({
@@ -354,9 +367,9 @@ exports.signSharePoint = async (req, res) => {
           to: sharePoint.createdBy.email,
           username: sharePoint.createdBy.username,
           documentTitle: sharePoint.title,
-          documentId: sharePoint._id.toString(),
+          documentId: documentId, // 🔧 FIX: Use the correct document ID
         })
-        console.log(`📧 Completion notification sent to creator`)
+        console.log(`📧 Completion notification sent to creator with document ID: ${documentId}`)
       } catch (emailError) {
         console.error("❌ Failed to send completion notification:", emailError)
       }
@@ -393,6 +406,10 @@ exports.disapproveSharePoint = async (req, res) => {
     if (!sharePoint) {
       return res.status(404).json({ error: "SharePoint not found" })
     }
+
+    // 🔧 FIX: Ensure we use the correct MongoDB _id as string
+    const documentId = sharePoint._id.toString()
+    console.log(`📋 Processing disapproval for SharePoint ID: ${documentId}`)
 
     if (!sharePoint.managerApproved) {
       return res.status(403).json({
@@ -450,12 +467,12 @@ exports.disapproveSharePoint = async (req, res) => {
         to: sharePoint.createdBy.email,
         username: sharePoint.createdBy.username,
         documentTitle: sharePoint.title,
-        documentId: sharePoint._id.toString(),
+        documentId: documentId, // 🔧 FIX: Use the correct document ID
         disapprovedBy: req.user.username,
         disapprovalNote: disapprovalNote.trim(),
         isManagerDisapproval: false,
       })
-      console.log(`📧 Relaunch notification sent to creator`)
+      console.log(`📧 Relaunch notification sent to creator with document ID: ${documentId}`)
     } catch (emailError) {
       console.error("❌ Failed to send relaunch notification:", emailError)
     }
@@ -494,6 +511,10 @@ exports.relaunchSharePoint = async (req, res) => {
       return res.status(404).json({ error: "SharePoint not found" })
     }
 
+    // 🔧 FIX: Ensure we use the correct MongoDB _id as string
+    const documentId = sharePoint._id.toString()
+    console.log(`📋 Processing relaunch for SharePoint ID: ${documentId}`)
+
     if (sharePoint.createdBy._id.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: "Only the document creator can relaunch the document" })
     }
@@ -526,9 +547,10 @@ exports.relaunchSharePoint = async (req, res) => {
     }))
     sharePoint.usersToSign = resetSigners
 
-    const relaunchCommentText = relaunchComment && relaunchComment.trim()
-      ? relaunchComment.trim()
-      : "Document relaunched to address previous concerns"
+    const relaunchCommentText =
+      relaunchComment && relaunchComment.trim()
+        ? relaunchComment.trim()
+        : "Document relaunched to address previous concerns"
 
     sharePoint.updateHistory.push({
       action: "relaunched",
@@ -556,11 +578,11 @@ exports.relaunchSharePoint = async (req, res) => {
         deadline: sharePoint.deadline,
         createdBy: req.user.username,
         comment: sharePoint.comment || "",
-        documentId: sharePoint._id.toString(),
+        documentId: documentId, // 🔧 FIX: Use the correct document ID
       }))
 
       await sendBulkEmails(managerEmailList, "managerApproval")
-      console.log("📧 Manager re-approval notifications sent successfully")
+      console.log(`📧 Manager re-approval notifications sent successfully with document ID: ${documentId}`)
     } catch (emailError) {
       console.error("❌ Failed to send re-approval notifications:", emailError)
     }
@@ -577,7 +599,7 @@ exports.relaunchSharePoint = async (req, res) => {
     }
 
     // Count how many users already approved
-    const alreadyApprovedCount = sharePoint.usersToSign.filter(signer => signer.hasSigned).length
+    const alreadyApprovedCount = sharePoint.usersToSign.filter((signer) => signer.hasSigned).length
     const totalUsers = sharePoint.usersToSign.length
 
     res.json({
@@ -592,7 +614,7 @@ exports.relaunchSharePoint = async (req, res) => {
   }
 }
 
-// Keep all other existing functions unchanged
+// Keep all other existing functions unchanged...
 exports.getAllSharePoints = async (req, res) => {
   try {
     const {
