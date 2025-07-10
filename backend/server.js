@@ -2,76 +2,70 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const http = require("http");
-const { initSocket } = require("./utils/socket"); // Corrected path
+const path = require("path");
 require("dotenv").config();
+
+// Socket utility
+const { initSocket } = require("./utils/socket");
 
 // Routes
 const userRoutes = require("./routes/userRoutes");
 const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
-const sharePointRoutes = require("./routes/sharePointRoutes")
-
+const sharePointRoutes = require("./routes/sharePointRoutes");
 
 const app = express();
-
-// Create HTTP server
 const server = http.createServer(app);
 
 // Middleware
 app.use(cors({
   origin: [
     'https://novares-sharepoint.onrender.com',
-    'http://localhost:3000', // For local development
-    'http://localhost:5173'  // For Vite default port if you're using it
+    'http://localhost:3000',
+    'http://localhost:5173'
   ],
-  credentials: true, // This is crucial for allowing cookies/credentials
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
-}))
-// Removed duplicate app.use(express.json())
+}));
 
-// MongoDB Connection
+app.use(express.json());
 
-app.use(express.json())
-
-// MongoDB Connection
+// MongoDB connection
 mongoose
   .connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
-  .then(() => {
-    console.log("MongoDB connected")
-  })
-  .catch((error) => {
-    console.error("MongoDB connection failed:", error)
-  })
-// Handle Mongoose Deprecation Warning
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((error) => console.error("❌ MongoDB connection failed:", error));
+
 mongoose.set("strictQuery", false);
 
-// Routes
+// Serve static files from React (adjust 'dist' if using CRA)
+app.use(express.static(path.join(__dirname, 'client', 'dist')));
+
+// API routes
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/sharepoints", sharePointRoutes)
+app.use("/api/sharepoints", sharePointRoutes);
 
+// Catch-all route to serve frontend for non-API routes
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "client", "dist", "index.html"));
+});
 
-// Start Server and Initialize Socket.IO
+// Start server + initialize Socket.IO
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Server is running on port: ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 
-  // Initialize Socket.IO after server starts
   try {
     const { io, emitNewCall } = initSocket(server);
     app.set("emitNewCall", emitNewCall);
-    console.log(`Socket.IO initialized on port ${PORT}`);
+    console.log("✅ Socket.IO initialized");
   } catch (error) {
-    console.error("Failed to initialize Socket.IO:", {
-      message: error.message,
-      stack: error.stack,
-    });
+    console.error("❌ Socket.IO initialization failed:", error.message);
   }
-
-  
 });
