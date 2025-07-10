@@ -2,37 +2,34 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const http = require("http");
-const { initSocket } = require("./utils/socket"); // Corrected path
+const { initSocket } = require("./utils/socket");
+const path = require("path"); // Add this for path handling
 require("dotenv").config();
 
 // Routes
 const userRoutes = require("./routes/userRoutes");
 const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
-const sharePointRoutes = require("./routes/sharePointRoutes")
-
+const sharePointRoutes = require("./routes/sharePointRoutes");
 
 const app = express();
-
-// Create HTTP server
 const server = http.createServer(app);
 
 // Middleware
 app.use(cors({
   origin: [
     'https://novares-sharepoint.onrender.com',
-    'http://localhost:3000', // For local development
-    'http://localhost:5173'  // For Vite default port if you're using it
+    'http://localhost:3000',
+    'http://localhost:5173'
   ],
-  credentials: true, // This is crucial for allowing cookies/credentials
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
-}))
-// Removed duplicate app.use(express.json())
+}));
+app.use(express.json());
 
-// MongoDB Connection
-
-app.use(express.json())
+// Serve static files from the React frontend build
+app.use(express.static(path.join(__dirname, 'build'))); // Adjust 'build' to your frontend build folder name
 
 // MongoDB Connection
 mongoose
@@ -41,27 +38,28 @@ mongoose
     useUnifiedTopology: true,
   })
   .then(() => {
-    console.log("MongoDB connected")
+    console.log("MongoDB connected");
   })
   .catch((error) => {
-    console.error("MongoDB connection failed:", error)
-  })
-// Handle Mongoose Deprecation Warning
+    console.error("MongoDB connection failed:", error);
+  });
 mongoose.set("strictQuery", false);
 
-// Routes
+// API Routes
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/sharepoints", sharePointRoutes)
+app.use("/api/sharepoints", sharePointRoutes);
 
+// Catch-all route to serve index.html for all other routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html')); // Adjust 'build' to your frontend build folder
+});
 
 // Start Server and Initialize Socket.IO
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server is running on port: ${PORT}`);
-
-  // Initialize Socket.IO after server starts
   try {
     const { io, emitNewCall } = initSocket(server);
     app.set("emitNewCall", emitNewCall);
@@ -72,6 +70,4 @@ server.listen(PORT, () => {
       stack: error.stack,
     });
   }
-
-  
 });
