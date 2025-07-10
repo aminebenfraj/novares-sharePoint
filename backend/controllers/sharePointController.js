@@ -216,22 +216,38 @@ exports.approveSharePoint = async (req, res) => {
     await sharePoint.save()
 
     if (approved) {
-      // Send email to assigned users for signing
+      // Send email to assigned users for signing (only to users who haven't signed yet)
       try {
-        const userEmailList = sharePoint.usersToSign.map((signer) => ({
-          to: signer.user.email,
-          username: signer.user.username,
-          documentTitle: sharePoint.title,
-          documentLink: sharePoint.link,
-          deadline: sharePoint.deadline,
-          createdBy: sharePoint.createdBy.username,
-          approvedBy: req.user.username,
-          comment: sharePoint.comment || "",
-          documentId: sharePoint._id.toString(),
-        }))
+        const usersToNotify = sharePoint.usersToSign.filter(signer => !signer.hasSigned)
+        
+        const userEmailPromises = usersToNotify.map((signer) => 
+          sendUserSigningEmail({
+            to: signer.user.email,
+            username: signer.user.username,
+            documentTitle: sharePoint.title,
+            documentLink: sharePoint.link,
+            deadline: sharePoint.deadline,
+            createdBy: sharePoint.createdBy.username,
+            approvedBy: req.user.username,
+            comment: sharePoint.comment || "",
+            documentId: sharePoint._id.toString(),
+          })
+        )
 
-        await sendBulkEmails(userEmailList, "userSigning")
-        console.log(`📧 User signing notifications sent successfully`)
+        const emailResults = await Promise.allSettled(userEmailPromises)
+        
+        const successful = emailResults.filter(result => result.status === 'fulfilled').length
+        const failed = emailResults.filter(result => result.status === 'rejected').length
+        
+        console.log(`📧 User signing notifications: ${successful} successful, ${failed} failed`)
+        
+        // Log any failures
+        emailResults.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.error(`❌ Failed to send email to ${usersToNotify[index].user.email}:`, result.reason)
+          }
+        })
+        
       } catch (emailError) {
         console.error("❌ Failed to send user signing notifications:", emailError)
       }
@@ -465,7 +481,7 @@ exports.disapproveSharePoint = async (req, res) => {
   }
 }
 
-// Creator relaunches document - Email to assigned managers again
+// Creator relaunches document - Email to assigned managers again (PRESERVE USER APPROVALS)
 exports.relaunchSharePoint = async (req, res) => {
   try {
     const { relaunchComment } = req.body
@@ -489,22 +505,24 @@ exports.relaunchSharePoint = async (req, res) => {
       })
     }
 
-    // Reset document state
+    // Reset document state but PRESERVE existing user approvals
     sharePoint.status = "pending_approval"
     sharePoint.managerApproved = false
     sharePoint.approvedBy = null
     sharePoint.approvedAt = null
     sharePoint.disapprovalNote = null
 
-    // Reset all user signatures and disapprovals
+    // PRESERVE user signatures but ONLY reset disapprovals
     const resetSigners = sharePoint.usersToSign.map((signer) => ({
       ...signer.toObject(),
-      hasSigned: false,
-      signedAt: null,
-      signatureNote: null,
-      hasDisapproved: false,
-      disapprovedAt: null,
-      disapprovalNote: null,
+      // Keep existing approvals (hasSigned, signedAt, signatureNote)
+      hasSigned: signer.hasSigned, // PRESERVE
+      signedAt: signer.signedAt, // PRESERVE
+      signatureNote: signer.signatureNote, // PRESERVE
+      // Only reset disapprovals
+      hasDisapproved: false, // RESET
+      disapprovedAt: null, // RESET
+      disapprovalNote: null, // RESET
     }))
     sharePoint.usersToSign = resetSigners
 
@@ -515,7 +533,7 @@ exports.relaunchSharePoint = async (req, res) => {
     sharePoint.updateHistory.push({
       action: "relaunched",
       performedBy: req.user._id,
-      details: `Document relaunched by ${req.user.username}`,
+      details: `Document relaunched by ${req.user.username}. Existing user approvals preserved.`,
       comment: relaunchCommentText,
       userAction: {
         type: "relaunch",
@@ -558,9 +576,15 @@ exports.relaunchSharePoint = async (req, res) => {
       ...completionData,
     }
 
+    // Count how many users already approved
+    const alreadyApprovedCount = sharePoint.usersToSign.filter(signer => signer.hasSigned).length
+    const totalUsers = sharePoint.usersToSign.length
+
     res.json({
-      message: `SharePoint relaunched successfully. Managers have been notified for re-approval.`,
+      message: `SharePoint relaunched successfully. Managers have been notified for re-approval. ${alreadyApprovedCount}/${totalUsers} user approvals preserved.`,
       sharePoint: responseData,
+      preservedApprovals: alreadyApprovedCount,
+      totalUsers: totalUsers,
     })
   } catch (error) {
     console.error("Error relaunching SharePoint:", error)
