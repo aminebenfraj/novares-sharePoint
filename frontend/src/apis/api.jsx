@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const axiosInstance = axios.create({
-  baseURL: `https://novares-sharepoint-backend.onrender.com`,
+  baseURL: `http://localhost:5000/`,
   timeout: 5000,
 });
 

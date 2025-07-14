@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { motion } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
@@ -95,6 +95,8 @@ export default function SharePointShow() {
   const [viewFilter, setViewFilter] = useState("all")
   const [sortBy, setSortBy] = useState("createdAt")
   const [sortOrder, setSortOrder] = useState("desc")
+  const [approxiDateFilter, setApproxiDateFilter] = useState("all")
+  const [requesterDepartmentFilter, setRequesterDepartmentFilter] = useState("all")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [refreshInterval, setRefreshInterval] = useState(null)
   const [lastRefresh, setLastRefresh] = useState(new Date())
@@ -104,6 +106,16 @@ export default function SharePointShow() {
     totalItems: 0,
   })
   const [currentUserInfo, setCurrentUserInfo] = useState(null)
+
+  const uniqueApproxiDates = useMemo(() => {
+    const dates = new Set(sharePoints.map((sp) => sp.approxiDate).filter(Boolean))
+    return ["all", ...Array.from(dates).sort()]
+  }, [sharePoints])
+
+  const uniqueRequesterDepartments = useMemo(() => {
+    const departments = new Set(sharePoints.map((sp) => sp.requesterDepartment).filter(Boolean))
+    return ["all", ...Array.from(departments).sort()]
+  }, [sharePoints])
 
   // Navigation handlers
   const handleViewDetail = (id) => {
@@ -300,8 +312,10 @@ export default function SharePointShow() {
 
   const filteredSharePoints = sharePoints.filter(
     (sp) =>
-      sp?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sp?.createdBy?.username?.toLowerCase().includes(searchTerm.toLowerCase()),
+      (sp?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        sp?.createdBy?.username?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+      (approxiDateFilter === "all" || sp?.approxiDate === approxiDateFilter) &&
+      (requesterDepartmentFilter === "all" || sp?.requesterDepartment === requesterDepartmentFilter),
   )
 
   return (
@@ -430,6 +444,32 @@ export default function SharePointShow() {
                         </SelectContent>
                       </Select>
 
+                      <Select value={approxiDateFilter} onValueChange={setApproxiDateFilter}>
+                        <SelectTrigger className="w-[150px]">
+                          <SelectValue placeholder="Approxi Date" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {uniqueApproxiDates.map((date) => (
+                            <SelectItem key={date} value={date}>
+                              {date === "all" ? "All Dates" : date}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      <Select value={requesterDepartmentFilter} onValueChange={setRequesterDepartmentFilter}>
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Requester Dept." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {uniqueRequesterDepartments.map((dept) => (
+                            <SelectItem key={dept} value={dept}>
+                              {dept === "all" ? "All Departments" : dept}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
                       <Select value={sortBy} onValueChange={setSortBy}>
                         <SelectTrigger className="w-[130px]">
                           <SelectValue placeholder="Sort by" />
@@ -500,6 +540,8 @@ export default function SharePointShow() {
                           <TableHead>Progress</TableHead>
                           <TableHead>Signers</TableHead>
                           <TableHead>Deadline</TableHead>
+                          <TableHead>Approxi Date</TableHead>
+                          <TableHead>Requester Dept.</TableHead>
                           <TableHead>Created By</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
@@ -606,6 +648,8 @@ export default function SharePointShow() {
                                   </Badge>
                                 )}
                               </TableCell>
+                              <TableCell>{sharePoint.approxiDate || "N/A"}</TableCell>
+                              <TableCell>{sharePoint.requesterDepartment || "N/A"}</TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
                                   <Avatar className="w-6 h-6">
