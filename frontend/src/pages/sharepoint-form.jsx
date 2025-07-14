@@ -12,17 +12,51 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Calendar, Users, FileText, LinkIcon, AlertCircle, CheckCircle2, Send, X, ArrowLeft, Clock, Target, MessageSquare, Check, ChevronsUpDown, Loader2, Shield, Search } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Calendar,
+  Users,
+  FileText,
+  LinkIcon,
+  AlertCircle,
+  CheckCircle2,
+  Send,
+  X,
+  ArrowLeft,
+  Clock,
+  Target,
+  MessageSquare,
+  Check,
+  Loader2,
+  Shield,
+  Search,
+  Building2,
+} from "lucide-react"
 import { createSharePoint } from "../apis/sharePointApi"
 import { getAllUsers } from "../apis/admin"
 import { toast } from "@/hooks/use-toast"
 import { useAuth } from "../context/AuthContext"
 import MainLayout from "../components/MainLayout"
 import { cn } from "@/lib/utils"
+
+// Department options
+const DEPARTMENT_OPTIONS = [
+  "Direction",
+  "Engineering",
+  "Business",
+  "Production",
+  "Controlling",
+  "Financial",
+  "Purchasing",
+  "Logistics",
+  "Quality",
+  "Human Resources",
+  "Maintenance",
+  "Health & Safety",
+  "Informatic Systems",
+]
 
 // Animation variants
 const containerVariants = {
@@ -70,6 +104,7 @@ export default function SharePointCreateEnhanced() {
     link: "",
     comment: "",
     deadline: "",
+    requesterDepartment: "", // NEW FIELD
   })
 
   const [errors, setErrors] = useState({})
@@ -95,7 +130,7 @@ export default function SharePointCreateEnhanced() {
       title: "Document Details",
       description: "Basic information about your document",
       icon: FileText,
-      fields: ["title", "link"],
+      fields: ["title", "link", "requesterDepartment"], // Added requesterDepartment
     },
     {
       id: 1,
@@ -129,12 +164,13 @@ export default function SharePointCreateEnhanced() {
 
   // Calculate form completion progress
   useEffect(() => {
-    const totalFields = 5 // title, link, deadline, managers, usersToSign
+    const totalFields = 6 // title, link, deadline, requesterDepartment, managers, usersToSign
     let completedFields = 0
 
     if (formData.title.trim()) completedFields++
     if (formData.link.trim()) completedFields++
     if (formData.deadline) completedFields++
+    if (formData.requesterDepartment) completedFields++ // NEW FIELD
     if (selectedManager) completedFields++
     if (selectedUsers.length > 0) completedFields++
 
@@ -225,6 +261,13 @@ export default function SharePointCreateEnhanced() {
       }
     }
 
+    // NEW VALIDATION: Requester Department
+    if (step.fields.includes("requesterDepartment")) {
+      if (!formData.requesterDepartment) {
+        newErrors.requesterDepartment = "Requester department is required"
+      }
+    }
+
     if (step.fields.includes("deadline")) {
       if (!formData.deadline) {
         newErrors.deadline = "Deadline is required"
@@ -256,6 +299,7 @@ export default function SharePointCreateEnhanced() {
   }
 
   const handleInputChange = (field, value) => {
+    console.log(`Setting ${field} to:`, value) // Debug log
     setFormData((prev) => ({ ...prev, [field]: value }))
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }))
@@ -310,11 +354,13 @@ export default function SharePointCreateEnhanced() {
         link: formData.link.trim(),
         comment: formData.comment.trim(),
         deadline: formData.deadline,
+        requesterDepartment: formData.requesterDepartment, // Ensure this is included
         usersToSign: selectedUsers.map((user) => user._id),
         managersToApprove: [selectedManager._id],
       }
 
-      console.log("Submitting data:", submitData)
+      console.log("Submitting data:", submitData) // Debug log
+      console.log("Requester Department:", formData.requesterDepartment) // Debug log
 
       await createSharePoint(submitData)
 
@@ -349,6 +395,7 @@ export default function SharePointCreateEnhanced() {
       link: "",
       comment: "",
       deadline: "",
+      requesterDepartment: "", // NEW FIELD
     })
     setSelectedUsers([])
     setSelectedManager(null)
@@ -356,7 +403,7 @@ export default function SharePointCreateEnhanced() {
     setErrors({})
     setApiError("")
     setSubmitSuccess(false)
-    
+
     // Navigate back to SharePoint list
     navigate("/sharepoint")
   }
@@ -420,17 +467,15 @@ export default function SharePointCreateEnhanced() {
           className="pl-10"
         />
       </div>
-      
+
       <div className="border rounded-lg">
         <div className="p-4 border-b bg-muted/50">
           <div className="flex items-center justify-between">
             <h4 className="font-medium">Available Users ({filteredUsers.length})</h4>
-            <div className="text-sm text-muted-foreground">
-              {selectedUsers.length} selected
-            </div>
+            <div className="text-sm text-muted-foreground">{selectedUsers.length} selected</div>
           </div>
         </div>
-        
+
         <ScrollArea className="h-64">
           <div className="p-2">
             {filteredUsers.length === 0 ? (
@@ -449,7 +494,7 @@ export default function SharePointCreateEnhanced() {
                       key={user._id}
                       className={cn(
                         "flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors",
-                        isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50"
+                        isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50",
                       )}
                       onClick={() => handleUserToggle(user)}
                     >
@@ -462,7 +507,7 @@ export default function SharePointCreateEnhanced() {
                         <div className="flex items-center gap-2">
                           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10">
                             <span className="text-sm font-medium text-primary">
-                              {user.username?.charAt(0)?.toUpperCase() || 'U'}
+                              {user.username?.charAt(0)?.toUpperCase() || "U"}
                             </span>
                           </div>
                           <div className="flex-1 min-w-0">
@@ -508,17 +553,15 @@ export default function SharePointCreateEnhanced() {
           className="pl-10"
         />
       </div>
-      
+
       <div className="border rounded-lg">
         <div className="p-4 border-b bg-muted/50">
           <div className="flex items-center justify-between">
             <h4 className="font-medium">Available Managers ({filteredManagers.length})</h4>
-            <div className="text-sm text-muted-foreground">
-              {selectedManager ? '1 selected' : 'None selected'}
-            </div>
+            <div className="text-sm text-muted-foreground">{selectedManager ? "1 selected" : "None selected"}</div>
           </div>
         </div>
-        
+
         <ScrollArea className="h-64">
           <div className="p-2">
             {filteredManagers.length === 0 ? (
@@ -537,14 +580,16 @@ export default function SharePointCreateEnhanced() {
                       key={manager._id}
                       className={cn(
                         "flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors",
-                        isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50"
+                        isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50",
                       )}
                       onClick={() => handleManagerSelect(manager)}
                     >
-                      <div className={cn(
-                        "w-4 h-4 rounded-full border-2 border-primary flex items-center justify-center",
-                        isSelected ? "bg-primary" : "bg-transparent"
-                      )}>
+                      <div
+                        className={cn(
+                          "w-4 h-4 rounded-full border-2 border-primary flex items-center justify-center",
+                          isSelected ? "bg-primary" : "bg-transparent",
+                        )}
+                      >
                         {isSelected && <div className="w-2 h-2 bg-white rounded-full" />}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -727,6 +772,45 @@ export default function SharePointCreateEnhanced() {
                               You can enter a web URL or a local file path (e.g., C:\Documents\file.pdf)
                             </p>
                           </div>
+
+                          {/* NEW FIELD: Requester Department */}
+                          <div className="space-y-2">
+                            <Label htmlFor="requesterDepartment" className="text-sm font-medium">
+                              Requester Department *
+                            </Label>
+                            <div className="relative">
+                              <Building2 className="absolute w-4 h-4 left-3 top-3 text-muted-foreground" />
+                              <Select
+                                value={formData.requesterDepartment}
+                                onValueChange={(value) => handleInputChange("requesterDepartment", value)}
+                              >
+                                <SelectTrigger
+                                  className={cn(
+                                    "pl-10 transition-all duration-200",
+                                    errors.requesterDepartment && "border-destructive focus:border-destructive",
+                                  )}
+                                >
+                                  <SelectValue placeholder="Select your department" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {DEPARTMENT_OPTIONS.map((department) => (
+                                    <SelectItem key={department} value={department}>
+                                      {department}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {errors.requesterDepartment && (
+                              <p className="flex items-center gap-1 text-sm text-destructive">
+                                <AlertCircle className="w-3 h-3" />
+                                {errors.requesterDepartment}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              Select the department that is requesting this document approval
+                            </p>
+                          </div>
                         </div>
                       </motion.div>
                     )}
@@ -858,11 +942,7 @@ export default function SharePointCreateEnhanced() {
                                       </div>
                                     </div>
                                   </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setSelectedManager(null)}
-                                  >
+                                  <Button variant="ghost" size="sm" onClick={() => setSelectedManager(null)}>
                                     <X className="w-4 h-4" />
                                   </Button>
                                 </div>
@@ -989,6 +1069,10 @@ export default function SharePointCreateEnhanced() {
                                     {formData.deadline ? new Date(formData.deadline).toLocaleString() : "Not set"}
                                   </p>
                                 </div>
+                                <div>
+                                  <Label className="text-sm font-medium text-muted-foreground">Department</Label>
+                                  <p className="text-sm">{formData.requesterDepartment || "Not selected"}</p>
+                                </div>
                               </div>
                               <div>
                                 <Label className="text-sm font-medium text-muted-foreground">Link/Path</Label>
@@ -1040,17 +1124,13 @@ export default function SharePointCreateEnhanced() {
                       <Button
                         variant="outline"
                         onClick={handleCancel}
-                        className="flex items-center gap-2"
+                        className="flex items-center gap-2 bg-transparent"
                       >
                         <X className="w-4 h-4" />
                         Cancel
                       </Button>
                       {currentStep > 0 && (
-                        <Button
-                          variant="outline"
-                          onClick={prevStep}
-                          className="flex items-center gap-2"
-                        >
+                        <Button variant="outline" onClick={prevStep} className="flex items-center gap-2 bg-transparent">
                           <ArrowLeft className="w-4 h-4" />
                           Previous
                         </Button>

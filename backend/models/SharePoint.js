@@ -32,6 +32,34 @@ const sharePointSchema = new mongoose.Schema(
       immutable: true,
     },
 
+    // NEW: Requester department field
+    requesterDepartment: {
+      type: String,
+      required: true,
+      enum: [
+        "Direction",
+        "Engineering",
+        "Business",
+        "Production",
+        "Controlling",
+        "Financial",
+        "Purchasing",
+        "Logistics",
+        "Quality",
+        "Human Resources",
+        "Maintenance",
+        "Health & Safety",
+        "Informatic Systems",
+      ],
+    },
+
+    // NEW: Auto-generated approximate date field
+    approxiDate: {
+      type: String,
+      unique: true,
+      immutable: true,
+    },
+
     // Enhanced approval system
     managersToApprove: [
       {
@@ -287,8 +315,41 @@ sharePointSchema.virtual("allComments").get(function () {
   return comments.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
 })
 
-// Enhanced pre-save middleware to handle the new workflow with disapprovals
-sharePointSchema.pre("save", function (next) {
+// NEW: Function to generate the next approxi_date
+async function generateApproxiDate() {
+  const currentYear = new Date().getFullYear()
+  const yearPrefix = currentYear.toString()
+
+  // Find the highest correlative number for the current year
+  const lastDocument = await mongoose
+    .model("SharePoint")
+    .findOne({
+      approxiDate: { $regex: `^${yearPrefix}-` },
+    })
+    .sort({ approxiDate: -1 })
+
+  let nextNumber = 1
+  if (lastDocument && lastDocument.approxiDate) {
+    const lastNumber = Number.parseInt(lastDocument.approxiDate.split("-")[1])
+    nextNumber = lastNumber + 1
+  }
+
+  // Format with leading zero if needed
+  const formattedNumber = nextNumber.toString().padStart(2, "0")
+  return `${yearPrefix}-${formattedNumber}`
+}
+
+// Pre-save middleware to generate approxi_date
+sharePointSchema.pre("save", async function (next) {
+  // Generate approxi_date only for new documents
+  if (this.isNew && !this.approxiDate) {
+    try {
+      this.approxiDate = await generateApproxiDate()
+    } catch (error) {
+      return next(error)
+    }
+  }
+
   // Check for disapprovals first
   if (this.hasDisapprovals) {
     this.status = "disapproved"
@@ -323,5 +384,7 @@ sharePointSchema.index({ managersToApprove: 1 })
 sharePointSchema.index({ managerApproved: 1 })
 sharePointSchema.index({ "updateHistory.timestamp": -1 })
 sharePointSchema.index({ "updateHistory.performedBy": 1 })
+sharePointSchema.index({ requesterDepartment: 1 })
+sharePointSchema.index({ approxiDate: 1 })
 
 module.exports = mongoose.model("SharePoint", sharePointSchema)

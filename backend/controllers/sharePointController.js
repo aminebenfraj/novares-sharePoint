@@ -65,10 +65,41 @@ const calculateCompletionData = (sharePoint) => {
 // Create a new SharePoint - Email to assigned managers
 exports.createSharePoint = async (req, res) => {
   try {
-    const { title, link, comment, deadline, usersToSign, managersToApprove } = req.body
+    console.log("Received request body:", req.body) // Debug log
+
+    const { title, link, comment, deadline, usersToSign, managersToApprove, requesterDepartment } = req.body
+
+    console.log("Extracted requesterDepartment:", requesterDepartment) // Debug log
 
     if (!title || !link || !deadline) {
       return res.status(400).json({ error: "Title, link, and deadline are required" })
+    }
+
+    if (!requesterDepartment || requesterDepartment.trim() === "") {
+      console.log("RequesterDepartment validation failed:", requesterDepartment) // Debug log
+      return res.status(400).json({ error: "Requester department is required" })
+    }
+
+    // Validate that the department is one of the allowed values
+    const allowedDepartments = [
+      "Direction",
+      "Engineering",
+      "Business",
+      "Production",
+      "Controlling",
+      "Financial",
+      "Purchasing",
+      "Logistics",
+      "Quality",
+      "Human Resources",
+      "Maintenance",
+      "Health & Safety",
+      "Informatic Systems",
+    ]
+
+    if (!allowedDepartments.includes(requesterDepartment)) {
+      console.log("Invalid department:", requesterDepartment) // Debug log
+      return res.status(400).json({ error: "Invalid requester department selected" })
     }
 
     if (new Date(deadline) <= new Date()) {
@@ -93,11 +124,14 @@ exports.createSharePoint = async (req, res) => {
       return res.status(400).json({ error: "One or more selected managers do not exist" })
     }
 
+    console.log("Creating SharePoint with department:", requesterDepartment) // Debug log
+
     const sharePoint = new SharePoint({
       title,
       link,
       comment,
       deadline: new Date(deadline),
+      requesterDepartment: requesterDepartment.trim(), // Ensure no extra whitespace
       createdBy: req.user._id,
       usersToSign: selectedUsers.map((user) => ({ user: user._id })),
       managersToApprove: managersToApprove,
@@ -106,7 +140,7 @@ exports.createSharePoint = async (req, res) => {
         {
           action: "created",
           performedBy: req.user._id,
-          details: `SharePoint created with title: ${title}. Waiting for manager approval.`,
+          details: `SharePoint created with title: ${title}. Department: ${requesterDepartment}. Waiting for manager approval.`,
           comment: comment || null,
           userAction: {
             type: "creation",
@@ -120,6 +154,8 @@ exports.createSharePoint = async (req, res) => {
     })
 
     await sharePoint.save()
+    console.log("SharePoint saved successfully with department:", sharePoint.requesterDepartment) // Debug log
+
     await sharePoint.populate([
       { path: "createdBy", select: "username email roles" },
       { path: "usersToSign.user", select: "username email roles" },
@@ -140,7 +176,8 @@ exports.createSharePoint = async (req, res) => {
         deadline: deadline,
         createdBy: req.user.username,
         comment: comment || "",
-        documentId: documentId, // 🔧 FIX: Use the correct document ID
+        documentId: documentId,
+        requesterDepartment: requesterDepartment,
       }))
 
       await sendBulkEmails(managerEmailList, "managerApproval")
@@ -162,10 +199,14 @@ exports.createSharePoint = async (req, res) => {
     })
   } catch (error) {
     console.error("Error creating SharePoint:", error)
+    if (error.name === "ValidationError") {
+      // Handle Mongoose validation errors
+      const validationErrors = Object.values(error.errors).map((err) => err.message)
+      return res.status(400).json({ error: `Validation failed: ${validationErrors.join(", ")}` })
+    }
     res.status(500).json({ error: "Error creating SharePoint" })
   }
 }
-
 // Manager approves document - Email to assigned users
 exports.approveSharePoint = async (req, res) => {
   try {
@@ -299,6 +340,7 @@ exports.approveSharePoint = async (req, res) => {
     res.status(500).json({ error: "Error approving SharePoint" })
   }
 }
+
 
 // User signs document - Check if all signed, then email creator completion
 exports.signSharePoint = async (req, res) => {

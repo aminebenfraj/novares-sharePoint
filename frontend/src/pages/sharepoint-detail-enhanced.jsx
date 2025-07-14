@@ -51,6 +51,7 @@ import {
   Copy,
   MessageCircle,
   Quote,
+  Building2,
 } from "lucide-react"
 import {
   getSharePointById,
@@ -431,6 +432,7 @@ export default function SharePointDetailEnhanced({
       <div style="background: #f3f4f6; padding: 10px; border-radius: 8px; display: inline-block;">
         <p style="margin: 0; font-size: 14px; color: #6b7280;">
           <strong>Document ID:</strong> ${sharePoint._id}<br>
+          <strong>Approxi Date:</strong> ${sharePoint.approxiDate || "N/A"}<br>
           <strong>Generated:</strong> ${new Date().toLocaleString()}<br>
           <strong>Status:</strong> <span style="color: ${sharePoint.status === "completed" ? "#059669" : sharePoint.status === "rejected" || sharePoint.status === "disapproved" ? "#dc2626" : "#d97706"}; font-weight: bold; text-transform: uppercase;">${sharePoint.status.replace("_", " ")}</span>
         </p>
@@ -455,9 +457,11 @@ export default function SharePointDetailEnhanced({
           <p style="margin: 8px 0;"><strong>Created By:</strong> ${sharePoint.createdBy?.username || "Unknown"}</p>
           <p style="margin: 8px 0;"><strong>Creation Date:</strong> ${formatDate(sharePoint.creationDate)}</p>
           <p style="margin: 8px 0;"><strong>Deadline:</strong> ${formatDate(sharePoint.deadline)}</p>
+          <p style="margin: 8px 0;"><strong>Department:</strong> ${sharePoint.requesterDepartment || "N/A"}</p>
           <p style="margin: 8px 0;"><strong>SharePoint Link:</strong> <span style="font-size: 12px; word-break: break-all;">${sharePoint.link}</span></p>
         </div>
         <div>
+          <p style="margin: 8px 0;"><strong>Approxi Date:</strong> ${sharePoint.approxiDate || "N/A"}</p>
           <p style="margin: 8px 0;"><strong>Total Signers:</strong> ${sharePoint.usersToSign?.length || 0}</p>
           <p style="margin: 8px 0;"><strong>Completed Signatures:</strong> ${sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0}</p>
           <p style="margin: 8px 0;"><strong>Completion:</strong> ${completionPercentage}%</p>
@@ -702,7 +706,7 @@ export default function SharePointDetailEnhanced({
       footer.innerHTML = `
       <p style="margin: 0;">
         This report was generated automatically from the SharePoint Document Management System<br>
-        Generated on: ${new Date().toLocaleString()} | Document ID: ${sharePoint._id}
+        Generated on: ${new Date().toLocaleString()} | Document ID: ${sharePoint._id} | Approxi Date: ${sharePoint.approxiDate || "N/A"}
       </p>
     `
 
@@ -1043,7 +1047,21 @@ export default function SharePointDetailEnhanced({
                   <p className="text-muted-foreground">
                     Created by {sharePoint.createdBy?.username} on {formatDate(sharePoint.creationDate)}
                   </p>
-                  <p className="font-mono text-sm text-muted-foreground">ID: {sharePoint._id}</p>
+                  <div className="flex items-center gap-4 text-sm">
+                    <p className="font-mono text-muted-foreground">ID: {sharePoint._id}</p>
+                    {sharePoint.approxiDate && (
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-mono text-muted-foreground">Approxi: {sharePoint.approxiDate}</span>
+                      </div>
+                    )}
+                    {sharePoint.requesterDepartment && (
+                      <div className="flex items-center gap-1">
+                        <Building2 className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">{sharePoint.requesterDepartment}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge className={getStatusColor(sharePoint.status)} variant="outline">
@@ -1243,7 +1261,7 @@ export default function SharePointDetailEnhanced({
                                   <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
                                     <div className="flex items-center gap-2 mb-2">
                                       <Shield className="w-4 h-4 text-blue-600" />
-                                      <span className="text-sm font-medium text-blue-700">Manager Approved</span>
+                                      <span className="text-sm font-medium text-blue-700">Manager Approve</span>
                                     </div>
                                     <p className="text-xs text-blue-600">
                                       This document has been approved by the manager and is ready for your approval.
@@ -1541,6 +1559,28 @@ export default function SharePointDetailEnhanced({
                           </div>
 
                           <div className="space-y-4">
+                            {/* NEW: Display Approxi Date */}
+                            {sharePoint.approxiDate && (
+                              <div>
+                                <h3 className="mb-2 text-sm font-medium text-muted-foreground">Approxi Date</h3>
+                                <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted">
+                                  <Calendar className="w-4 h-4" />
+                                  <p className="font-mono font-medium">{sharePoint.approxiDate}</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* NEW: Display Requester Department */}
+                            {sharePoint.requesterDepartment && (
+                              <div>
+                                <h3 className="mb-2 text-sm font-medium text-muted-foreground">Requester Department</h3>
+                                <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted">
+                                  <Building2 className="w-4 h-4" />
+                                  <p className="font-medium">{sharePoint.requesterDepartment}</p>
+                                </div>
+                              </div>
+                            )}
+
                             <div>
                               <h3 className="mb-2 text-sm font-medium text-muted-foreground">Status Information</h3>
                               <div className="space-y-2">
@@ -1920,6 +1960,14 @@ export default function SharePointDetailEnhanced({
                                   <TableCell className="font-mono text-sm">{sharePoint._id}</TableCell>
                                 </TableRow>
                                 <TableRow>
+                                  <TableCell className="font-medium">Approxi Date</TableCell>
+                                  <TableCell className="font-mono text-sm">{sharePoint.approxiDate || "N/A"}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="font-medium">Requester Department</TableCell>
+                                  <TableCell>{sharePoint.requesterDepartment || "N/A"}</TableCell>
+                                </TableRow>
+                                <TableRow>
                                   <TableCell className="font-medium">Created At</TableCell>
                                   <TableCell>{formatDate(sharePoint.createdAt)}</TableCell>
                                 </TableRow>
@@ -2116,6 +2164,23 @@ export default function SharePointDetailEnhanced({
                       <Copy className="w-4 h-4 mr-2" />
                       Copy Document ID
                     </Button>
+                    {sharePoint.approxiDate && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full bg-transparent"
+                        onClick={() => {
+                          navigator.clipboard.writeText(sharePoint.approxiDate)
+                          toast({
+                            title: "Approxi Date Copied",
+                            description: "Approxi date has been copied to clipboard.",
+                          })
+                        }}
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy Approxi Date
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"

@@ -5,11 +5,15 @@ const BASE_URL = "api/sharepoints"
 
 // Create a new SharePoint document
 export const createSharePoint = (data) => {
-  const { title, link, comment, deadline, usersToSign, managersToApprove, externalEmails } = data
+  const { title, link, comment, deadline, usersToSign, managersToApprove, externalEmails, requesterDepartment } = data
 
   // Validate required fields
   if (!title || !link || !deadline) {
     return Promise.reject(new Error("Title, link, and deadline are required"))
+  }
+
+  if (!requesterDepartment || requesterDepartment.trim() === "") {
+    return Promise.reject(new Error("Requester department is required"))
   }
 
   if (!managersToApprove || managersToApprove.length === 0) {
@@ -25,6 +29,7 @@ export const createSharePoint = (data) => {
     link,
     comment,
     deadline,
+    requesterDepartment,
     usersToSign: usersToSign?.length || 0,
     managersToApprove: managersToApprove?.length || 0,
     externalEmails: externalEmails?.length || 0,
@@ -35,12 +40,12 @@ export const createSharePoint = (data) => {
     link,
     comment,
     deadline,
+    requesterDepartment,
     usersToSign: usersToSign || [],
     managersToApprove: managersToApprove || [],
     externalEmails: externalEmails || [],
   })
 }
-
 // Get all SharePoint documents with enhanced filtering and pagination
 export const getAllSharePoints = (filters = {}) => {
   const queryParams = new URLSearchParams()
