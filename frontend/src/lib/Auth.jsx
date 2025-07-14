@@ -1,6 +1,6 @@
 import axios from "axios"
 
-const API_URL = "http://localhost:5000/api/auth"
+const API_URL = "https://novares-sharepoint-backend.onrender.comapi/auth"
 
 // Get current user
 export const getCurrentUser = async () => {
