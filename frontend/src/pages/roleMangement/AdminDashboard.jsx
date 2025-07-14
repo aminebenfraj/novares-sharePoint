@@ -3,7 +3,22 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { Users, Search, Trash2, Edit, MoreHorizontal, Filter, RefreshCw, CheckCircle, AlertTriangle, Loader2, UserPlus } from 'lucide-react'
+import {
+  Users,
+  Search,
+  Trash2,
+  Edit,
+  MoreHorizontal,
+  Filter,
+  RefreshCw,
+  CheckCircle,
+  AlertTriangle,
+  Loader2,
+  UserPlus,
+  Eye,
+  EyeOff,
+  Info,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +30,8 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/hooks/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Progress } from "@/components/ui/progress"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -135,6 +152,11 @@ export default function AdminDashboard() {
   const [refreshing, setRefreshing] = useState(false)
   const [recentUsers, setRecentUsers] = useState([])
 
+  // Password validation states
+  const [showPassword, setShowPassword] = useState(false)
+  const [passwordStrength, setPasswordStrength] = useState(0)
+  const [activeTooltip, setActiveTooltip] = useState(false)
+
   const [newUserData, setNewUserData] = useState({
     license: "",
     username: "",
@@ -144,6 +166,67 @@ export default function AdminDashboard() {
   })
 
   const ITEMS_PER_PAGE = 10
+
+  // Password validation checks
+  const hasMinLength = newUserData.password.length >= 8
+  const hasUppercase = /[A-Z]/.test(newUserData.password)
+  const hasLowercase = /[a-z]/.test(newUserData.password)
+  const hasNumber = /[0-9]/.test(newUserData.password)
+  const hasSpecialChar = /[^A-Za-z0-9]/.test(newUserData.password)
+
+  // Calculate password strength
+  useEffect(() => {
+    if (newUserData.password.length === 0) {
+      setPasswordStrength(0)
+      return
+    }
+
+    let strength = 0
+    if (hasMinLength) strength += 20
+    if (hasUppercase) strength += 20
+    if (hasLowercase) strength += 20
+    if (hasNumber) strength += 20
+    if (hasSpecialChar) strength += 20
+
+    setPasswordStrength(strength)
+  }, [newUserData.password, hasMinLength, hasUppercase, hasLowercase, hasNumber, hasSpecialChar])
+
+  // Get strength color
+  const getStrengthColor = () => {
+    if (passwordStrength < 40) return "bg-red-500"
+    if (passwordStrength < 80) return "bg-yellow-500"
+    return "bg-green-500"
+  }
+
+  // Get strength text
+  const getStrengthText = () => {
+    if (passwordStrength < 40) return "Weak"
+    if (passwordStrength < 80) return "Medium"
+    return "Strong"
+  }
+
+  // Validate password before submission
+  const validatePassword = () => {
+    if (!newUserData.password) {
+      return "Password is required"
+    }
+    if (!hasMinLength) {
+      return "Password must be at least 8 characters long"
+    }
+    if (!hasUppercase) {
+      return "Password must contain at least one uppercase letter"
+    }
+    if (!hasLowercase) {
+      return "Password must contain at least one lowercase letter"
+    }
+    if (!hasNumber) {
+      return "Password must contain at least one number"
+    }
+    if (!hasSpecialChar) {
+      return "Password must contain at least one special character"
+    }
+    return null
+  }
 
   // Fetch users when component mounts or page changes
   useEffect(() => {
@@ -209,6 +292,18 @@ export default function AdminDashboard() {
     e.preventDefault()
     setIsSubmitting(true)
 
+    // Validate password
+    const passwordError = validatePassword()
+    if (passwordError) {
+      toast({
+        variant: "destructive",
+        title: "Password Validation Error",
+        description: passwordError,
+      })
+      setIsSubmitting(false)
+      return
+    }
+
     try {
       await createUser(newUserData)
 
@@ -223,6 +318,7 @@ export default function AdminDashboard() {
         password: "",
         roles: ["User"],
       })
+      setPasswordStrength(0)
 
       toast({
         title: "Success",
@@ -329,11 +425,6 @@ export default function AdminDashboard() {
     )
   }
 
-  // Modify the return statement to wrap the content with MainLayout
-  // Change this:
-  // return (
-  //   <div className="container p-6 mx-auto">
-  // To this:
   return (
     <MainLayout>
       <div className="container p-6 mx-auto">
@@ -367,7 +458,7 @@ export default function AdminDashboard() {
                     Add User
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Create New User</DialogTitle>
                     <DialogDescription>
@@ -416,16 +507,122 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="password">Password</Label>
-                      <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        placeholder="Create a strong password"
-                        value={newUserData.password}
-                        onChange={handleInputChange}
-                        required
-                      />
+                      <div className="flex items-center">
+                        <Label htmlFor="password">Password</Label>
+                        <TooltipProvider>
+                          <Tooltip open={activeTooltip} onOpenChange={setActiveTooltip}>
+                            <TooltipTrigger asChild>
+                              <Info
+                                className="w-4 h-4 ml-2 text-blue-500 cursor-pointer"
+                                onClick={() => setActiveTooltip(!activeTooltip)}
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="right"
+                              className="w-64 p-3 space-y-2 bg-white border border-gray-200 rounded-lg shadow-lg"
+                            >
+                              <p className="font-medium text-gray-800">Password requirements:</p>
+                              <ul className="pl-5 space-y-1 text-xs text-gray-600 list-disc">
+                                <li className={hasMinLength ? "text-green-600" : ""}>At least 8 characters</li>
+                                <li className={hasUppercase ? "text-green-600" : ""}>One uppercase letter (A-Z)</li>
+                                <li className={hasLowercase ? "text-green-600" : ""}>One lowercase letter (a-z)</li>
+                                <li className={hasNumber ? "text-green-600" : ""}>One number (0-9)</li>
+                                <li className={hasSpecialChar ? "text-green-600" : ""}>
+                                  One special character (!@#$%^&*)
+                                </li>
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          name="password"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Create a strong password"
+                          value={newUserData.password}
+                          onChange={handleInputChange}
+                          onFocus={() => setActiveTooltip(true)}
+                          onBlur={() => setActiveTooltip(false)}
+                          className="pr-10"
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="absolute transform -translate-y-1/2 right-3 top-1/2"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="w-4 h-4 text-gray-500" />
+                          ) : (
+                            <Eye className="w-4 h-4 text-gray-500" />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Password strength indicator */}
+                      {newUserData.password.length > 0 && (
+                        <div className="mt-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-gray-600">Password strength:</span>
+                            <span
+                              className={`text-xs font-medium ${
+                                passwordStrength < 40
+                                  ? "text-red-500"
+                                  : passwordStrength < 80
+                                    ? "text-yellow-500"
+                                    : "text-green-500"
+                              }`}
+                            >
+                              {getStrengthText()}
+                            </span>
+                          </div>
+                          <Progress
+                            value={passwordStrength}
+                            className="h-1.5 bg-gray-200"
+                            indicatorClassName={getStrengthColor()}
+                          />
+                        </div>
+                      )}
+
+                      {/* Password validation feedback */}
+                      {newUserData.password.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className={`flex items-center ${hasMinLength ? "text-green-600" : "text-red-500"}`}>
+                              <div
+                                className={`w-2 h-2 rounded-full mr-2 ${hasMinLength ? "bg-green-500" : "bg-red-500"}`}
+                              />
+                              8+ characters
+                            </div>
+                            <div className={`flex items-center ${hasUppercase ? "text-green-600" : "text-red-500"}`}>
+                              <div
+                                className={`w-2 h-2 rounded-full mr-2 ${hasUppercase ? "bg-green-500" : "bg-red-500"}`}
+                              />
+                              Uppercase
+                            </div>
+                            <div className={`flex items-center ${hasLowercase ? "text-green-600" : "text-red-500"}`}>
+                              <div
+                                className={`w-2 h-2 rounded-full mr-2 ${hasLowercase ? "bg-green-500" : "bg-red-500"}`}
+                              />
+                              Lowercase
+                            </div>
+                            <div className={`flex items-center ${hasNumber ? "text-green-600" : "text-red-500"}`}>
+                              <div
+                                className={`w-2 h-2 rounded-full mr-2 ${hasNumber ? "bg-green-500" : "bg-red-500"}`}
+                              />
+                              Number
+                            </div>
+                            <div className={`flex items-center ${hasSpecialChar ? "text-green-600" : "text-red-500"}`}>
+                              <div
+                                className={`w-2 h-2 rounded-full mr-2 ${hasSpecialChar ? "bg-green-500" : "bg-red-500"}`}
+                              />
+                              Special char
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -457,7 +654,7 @@ export default function AdminDashboard() {
                       <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>
                         Cancel
                       </Button>
-                      <Button type="submit" disabled={isSubmitting}>
+                      <Button type="submit" disabled={isSubmitting || passwordStrength < 100}>
                         {isSubmitting ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -564,7 +761,7 @@ export default function AdminDashboard() {
                   </SelectContent>
                 </Select>
 
-                <Button variant="outline" className="ml-auto" onClick={handleRefresh}>
+                <Button variant="outline" className="ml-auto bg-transparent" onClick={handleRefresh}>
                   <Filter className="w-4 h-4 mr-2" />
                   Refresh
                 </Button>
@@ -952,5 +1149,5 @@ export default function AdminDashboard() {
         </motion.div>
       </div>
     </MainLayout>
-  );
+  )
 }

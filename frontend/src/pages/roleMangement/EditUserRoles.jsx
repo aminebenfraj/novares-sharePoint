@@ -16,6 +16,10 @@ import {
   X,
   AlertTriangle,
   Info,
+  Lock,
+  Eye,
+  EyeOff,
+  Key,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -30,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/hooks/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Progress } from "@/components/ui/progress"
 
 // Import API functions
 import { getUserByLicense, adminUpdateUser } from "../../apis/admin"
@@ -106,14 +111,101 @@ export default function EditUserRoles() {
     roles: [],
   })
 
+  const [passwordData, setPasswordData] = useState({
+    newPassword: "",
+    confirmPassword: "",
+  })
+
   const [originalData, setOriginalData] = useState({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [searchRole, setSearchRole] = useState("")
   const [activeTab, setActiveTab] = useState("user-info")
   const [hasChanges, setHasChanges] = useState(false)
+  const [hasPasswordChanges, setHasPasswordChanges] = useState(false)
   const [successMessage, setSuccessMessage] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
+
+  // Password validation states
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [passwordStrength, setPasswordStrength] = useState(0)
+  const [activeTooltip, setActiveTooltip] = useState(false)
+
+  // Password validation checks
+  const hasMinLength = passwordData.newPassword.length >= 8
+  const hasUppercase = /[A-Z]/.test(passwordData.newPassword)
+  const hasLowercase = /[a-z]/.test(passwordData.newPassword)
+  const hasNumber = /[0-9]/.test(passwordData.newPassword)
+  const hasSpecialChar = /[^A-Za-z0-9]/.test(passwordData.newPassword)
+  const passwordsMatch =
+    passwordData.newPassword === passwordData.confirmPassword && passwordData.newPassword.length > 0
+
+  // Calculate password strength
+  useEffect(() => {
+    if (passwordData.newPassword.length === 0) {
+      setPasswordStrength(0)
+      return
+    }
+
+    let strength = 0
+    if (hasMinLength) strength += 20
+    if (hasUppercase) strength += 20
+    if (hasLowercase) strength += 20
+    if (hasNumber) strength += 20
+    if (hasSpecialChar) strength += 20
+
+    setPasswordStrength(strength)
+  }, [passwordData.newPassword, hasMinLength, hasUppercase, hasLowercase, hasNumber, hasSpecialChar])
+
+  // Check for password changes
+  useEffect(() => {
+    setHasPasswordChanges(passwordData.newPassword.length > 0 || passwordData.confirmPassword.length > 0)
+  }, [passwordData])
+
+  // Get strength color
+  const getStrengthColor = () => {
+    if (passwordStrength < 40) return "bg-red-500"
+    if (passwordStrength < 80) return "bg-yellow-500"
+    return "bg-green-500"
+  }
+
+  // Get strength text
+  const getStrengthText = () => {
+    if (passwordStrength < 40) return "Weak"
+    if (passwordStrength < 80) return "Medium"
+    return "Strong"
+  }
+
+  // Validate password before submission
+  const validatePassword = () => {
+    if (!passwordData.newPassword && !passwordData.confirmPassword) {
+      return null // No password change requested
+    }
+
+    if (!passwordData.newPassword) {
+      return "New password is required"
+    }
+    if (!hasMinLength) {
+      return "Password must be at least 8 characters long"
+    }
+    if (!hasUppercase) {
+      return "Password must contain at least one uppercase letter"
+    }
+    if (!hasLowercase) {
+      return "Password must contain at least one lowercase letter"
+    }
+    if (!hasNumber) {
+      return "Password must contain at least one number"
+    }
+    if (!hasSpecialChar) {
+      return "Password must contain at least one special character"
+    }
+    if (!passwordsMatch) {
+      return "Passwords do not match"
+    }
+    return null
+  }
 
   // Fetch user data
   useEffect(() => {
@@ -178,6 +270,11 @@ export default function EditUserRoles() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
+  const handlePasswordChange = (e) => {
+    const { name, value } = e.target
+    setPasswordData((prev) => ({ ...prev, [name]: value }))
+  }
+
   const toggleRole = (role) => {
     setFormData((prev) => ({
       ...prev,
@@ -192,12 +289,33 @@ export default function EditUserRoles() {
     setErrorMessage("")
 
     try {
+      // Validate password if changing
+      if (hasPasswordChanges) {
+        const passwordError = validatePassword()
+        if (passwordError) {
+          toast({
+            variant: "destructive",
+            title: "Password Validation Error",
+            description: passwordError,
+          })
+          setSubmitting(false)
+          return
+        }
+      }
+
       // Update user profile
-      await adminUpdateUser(license, {
+      const updateData = {
         username: formData.username,
         email: formData.email,
         image: formData.image,
-      })
+      }
+
+      // Add password to update if changing
+      if (hasPasswordChanges && passwordData.newPassword) {
+        updateData.password = passwordData.newPassword
+      }
+
+      await adminUpdateUser(license, updateData)
 
       // Update user roles
       await updateUserRoles(license, formData.roles)
@@ -205,6 +323,9 @@ export default function EditUserRoles() {
       setSuccessMessage("User updated successfully!")
       setOriginalData({ ...formData })
       setHasChanges(false)
+      setPasswordData({ newPassword: "", confirmPassword: "" })
+      setHasPasswordChanges(false)
+      setPasswordStrength(0)
 
       toast({
         title: "Success",
@@ -230,7 +351,7 @@ export default function EditUserRoles() {
   }
 
   const handleCancel = () => {
-    if (hasChanges) {
+    if (hasChanges || hasPasswordChanges) {
       if (window.confirm("You have unsaved changes. Are you sure you want to leave?")) {
         navigate("/admin")
       }
@@ -241,6 +362,7 @@ export default function EditUserRoles() {
 
   const resetForm = () => {
     setFormData({ ...originalData })
+    setPasswordData({ newPassword: "", confirmPassword: "" })
   }
 
   // Filter roles based on search term
@@ -351,6 +473,10 @@ export default function EditUserRoles() {
                     <User className="w-4 h-4" />
                     User Information
                   </TabsTrigger>
+                  <TabsTrigger value="password" className="flex items-center gap-2">
+                    <Key className="w-4 h-4" />
+                    Change Password
+                  </TabsTrigger>
                   <TabsTrigger value="roles" className="flex items-center gap-2">
                     <Shield className="w-4 h-4" />
                     Roles & Permissions
@@ -424,6 +550,183 @@ export default function EditUserRoles() {
                           </TooltipProvider>
                         </div>
                         <p className="text-xs text-muted-foreground">Leave empty to use system default avatar</p>
+                      </motion.div>
+                    </motion.div>
+                  </TabsContent>
+
+                  <TabsContent value="password" className="space-y-6">
+                    <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-6">
+                      <Alert variant="default" className="border-blue-200 bg-blue-50">
+                        <Info className="w-4 h-4 text-blue-600" />
+                        <AlertDescription className="text-blue-800">
+                          Leave password fields empty if you don't want to change the user's password.
+                        </AlertDescription>
+                      </Alert>
+
+                      <motion.div variants={slideUp} className="space-y-2">
+                        <div className="flex items-center">
+                          <Label htmlFor="newPassword" className="flex items-center gap-2">
+                            <Lock className="w-4 h-4 text-muted-foreground" />
+                            New Password
+                          </Label>
+                          <TooltipProvider>
+                            <Tooltip open={activeTooltip} onOpenChange={setActiveTooltip}>
+                              <TooltipTrigger asChild>
+                                <Info
+                                  className="w-4 h-4 ml-2 text-blue-500 cursor-pointer"
+                                  onClick={() => setActiveTooltip(!activeTooltip)}
+                                />
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="right"
+                                className="w-64 p-3 space-y-2 bg-white border border-gray-200 rounded-lg shadow-lg"
+                              >
+                                <p className="font-medium text-gray-800">Password requirements:</p>
+                                <ul className="pl-5 space-y-1 text-xs text-gray-600 list-disc">
+                                  <li className={hasMinLength ? "text-green-600" : ""}>At least 8 characters</li>
+                                  <li className={hasUppercase ? "text-green-600" : ""}>One uppercase letter (A-Z)</li>
+                                  <li className={hasLowercase ? "text-green-600" : ""}>One lowercase letter (a-z)</li>
+                                  <li className={hasNumber ? "text-green-600" : ""}>One number (0-9)</li>
+                                  <li className={hasSpecialChar ? "text-green-600" : ""}>
+                                    One special character (!@#$%^&*)
+                                  </li>
+                                </ul>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                        <div className="relative max-w-md">
+                          <Input
+                            id="newPassword"
+                            name="newPassword"
+                            type={showNewPassword ? "text" : "password"}
+                            placeholder="Enter new password"
+                            value={passwordData.newPassword}
+                            onChange={handlePasswordChange}
+                            onFocus={() => setActiveTooltip(true)}
+                            onBlur={() => setActiveTooltip(false)}
+                            className="pr-10"
+                          />
+                          <button
+                            type="button"
+                            className="absolute transform -translate-y-1/2 right-3 top-1/2"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                          >
+                            {showNewPassword ? (
+                              <EyeOff className="w-4 h-4 text-gray-500" />
+                            ) : (
+                              <Eye className="w-4 h-4 text-gray-500" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Password strength indicator */}
+                        {passwordData.newPassword.length > 0 && (
+                          <div className="max-w-md mt-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs text-gray-600">Password strength:</span>
+                              <span
+                                className={`text-xs font-medium ${
+                                  passwordStrength < 40
+                                    ? "text-red-500"
+                                    : passwordStrength < 80
+                                      ? "text-yellow-500"
+                                      : "text-green-500"
+                                }`}
+                              >
+                                {getStrengthText()}
+                              </span>
+                            </div>
+                            <Progress
+                              value={passwordStrength}
+                              className="h-1.5 bg-gray-200"
+                              indicatorClassName={getStrengthColor()}
+                            />
+                          </div>
+                        )}
+
+                        {/* Password validation feedback */}
+                        {passwordData.newPassword.length > 0 && (
+                          <div className="max-w-md mt-2 space-y-1">
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div className={`flex items-center ${hasMinLength ? "text-green-600" : "text-red-500"}`}>
+                                <div
+                                  className={`w-2 h-2 rounded-full mr-2 ${hasMinLength ? "bg-green-500" : "bg-red-500"}`}
+                                />
+                                8+ characters
+                              </div>
+                              <div className={`flex items-center ${hasUppercase ? "text-green-600" : "text-red-500"}`}>
+                                <div
+                                  className={`w-2 h-2 rounded-full mr-2 ${hasUppercase ? "bg-green-500" : "bg-red-500"}`}
+                                />
+                                Uppercase
+                              </div>
+                              <div className={`flex items-center ${hasLowercase ? "text-green-600" : "text-red-500"}`}>
+                                <div
+                                  className={`w-2 h-2 rounded-full mr-2 ${hasLowercase ? "bg-green-500" : "bg-red-500"}`}
+                                />
+                                Lowercase
+                              </div>
+                              <div className={`flex items-center ${hasNumber ? "text-green-600" : "text-red-500"}`}>
+                                <div
+                                  className={`w-2 h-2 rounded-full mr-2 ${hasNumber ? "bg-green-500" : "bg-red-500"}`}
+                                />
+                                Number
+                              </div>
+                              <div
+                                className={`flex items-center ${hasSpecialChar ? "text-green-600" : "text-red-500"}`}
+                              >
+                                <div
+                                  className={`w-2 h-2 rounded-full mr-2 ${hasSpecialChar ? "bg-green-500" : "bg-red-500"}`}
+                                />
+                                Special char
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+
+                      <motion.div variants={slideUp} className="space-y-2">
+                        <Label htmlFor="confirmPassword" className="flex items-center gap-2">
+                          <Lock className="w-4 h-4 text-muted-foreground" />
+                          Confirm New Password
+                        </Label>
+                        <div className="relative max-w-md">
+                          <Input
+                            id="confirmPassword"
+                            name="confirmPassword"
+                            type={showConfirmPassword ? "text" : "password"}
+                            placeholder="Confirm new password"
+                            value={passwordData.confirmPassword}
+                            onChange={handlePasswordChange}
+                            className="pr-10"
+                          />
+                          <button
+                            type="button"
+                            className="absolute transform -translate-y-1/2 right-3 top-1/2"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          >
+                            {showConfirmPassword ? (
+                              <EyeOff className="w-4 h-4 text-gray-500" />
+                            ) : (
+                              <Eye className="w-4 h-4 text-gray-500" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Password match indicator */}
+                        {passwordData.confirmPassword.length > 0 && (
+                          <div className="max-w-md">
+                            <div
+                              className={`flex items-center text-xs ${passwordsMatch ? "text-green-600" : "text-red-500"}`}
+                            >
+                              <div
+                                className={`w-2 h-2 rounded-full mr-2 ${passwordsMatch ? "bg-green-500" : "bg-red-500"}`}
+                              />
+                              {passwordsMatch ? "Passwords match" : "Passwords do not match"}
+                            </div>
+                          </div>
+                        )}
                       </motion.div>
                     </motion.div>
                   </TabsContent>
@@ -513,13 +816,17 @@ export default function EditUserRoles() {
                       Cancel
                     </Button>
 
-                    {hasChanges && (
+                    {(hasChanges || hasPasswordChanges) && (
                       <Button type="button" variant="outline" onClick={resetForm}>
                         Reset Changes
                       </Button>
                     )}
 
-                    <Button type="submit" disabled={submitting || !hasChanges} className="gap-2">
+                    <Button
+                      type="submit"
+                      disabled={submitting || (!hasChanges && !hasPasswordChanges)}
+                      className="gap-2"
+                    >
                       {submitting ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -542,4 +849,3 @@ export default function EditUserRoles() {
     </MainLayout>
   )
 }
-
