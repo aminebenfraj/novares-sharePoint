@@ -44,12 +44,12 @@ const initSocket = (server) => {
     });
 
     socket.on("join", ({ role }) => {
-      if (role === "LOGISTICA" && decoded.roles.includes("LOGISTICA")) {
-        socket.join("logistica");
-        console.log(`[${new Date().toISOString()}] [${uuid}] User joined logistica room`, { userId });
-      } else if (role === "PRODUCCION" && decoded.roles.includes("PRODUCCION")) {
-        socket.join("produccion");
-        console.log(`[${new Date().toISOString()}] [${uuid}] User joined produccion room`, { userId });
+      if (role === "Financial Staff" && decoded.roles.includes("Financial Staff")) {
+        socket.join("Financial Staff");
+        console.log(`[${new Date().toISOString()}] [${uuid}] User joined Financial Staff room`, { userId });
+      } else if (role === "Informatic Systems Staff" && decoded.roles.includes("Informatic Systems Staff")) {
+        socket.join("Informatic Systems Staff");
+        console.log(`[${new Date().toISOString()}] [${uuid}] User joined Informatic Systems Staff room`, { userId });
       } else {
         console.log(`[${new Date().toISOString()}] [${uuid}] User not authorized for ${role} room`, {
           userId,
@@ -75,8 +75,8 @@ const initSocket = (server) => {
       callId: call._id,
       status: call.status,
     });
-    io.to("logistica").emit("call-update", { type: "call-update", call });
-    io.to("produccion").emit("call-update", { type: "call-update", call });
+    io.to("Financial Staff").emit("call-update", { type: "call-update", call });
+    io.to("Informatic Systems Staff").emit("call-update", { type: "call-update", call });
     console.log(`[${new Date().toISOString()}] [${uuid}] Call-update emitted successfully`, {
       callId: call._id,
     });

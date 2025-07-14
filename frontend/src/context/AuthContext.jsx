@@ -94,19 +94,19 @@ export const AuthProvider = ({ children }) => {
     const roleMapping = {
       Project_Manager: "Project Manager",
       Business_Manager: "Business Manager",
-      Financial_Leader: "Financial Leader",
-      Manufacturing_Eng_Manager: "Manufacturing Eng. Manager",
-      Manufacturing_Eng_Leader: "Manufacturing Eng. Leader",
-      Methodes_UAP1_3: "Methodes UAP1&3",
-      Methodes_UAP2: "Methodes UAP2",
+      Financial_Leader: "Operations director",
+      Manufacturing_Eng_Manager: "Plant manager",
+      Manufacturing_Eng_Leader: "Engineering Manager",
+      Methodes_UAP1_3: "Purchasing Manager",
+      Methodes_UAP2: "Quality Manager",
       Maintenance_Manager: "Maintenance Manager",
-      Maintenance_Leader_UAP2: "Maintenance Leader UAP2",
-      Prod_Plant_Manager_UAP1: "Prod. Plant Manager UAP1",
-      Prod_Plant_Manager_UAP2: "Prod. Plant Manager UAP2",
+      
+      Prod_Plant_Manager_UAP1: "Maintenance Staff",
+      Prod_Plant_Manager_UAP2: "Health & Safety Staff",
       Quality_Manager: "Quality Manager",
-      Quality_Leader_UAP1: "Quality Leader UAP1",
-      Quality_Leader_UAP2: "Quality Leader UAP2",
-      Quality_Leader_UAP3: "Quality Leader UAP3",
+      Quality_Leader_UAP1: "Purchasing Staff",
+      Quality_Leader_UAP2: "Logistics Staff",
+      Quality_Leader_UAP3: "Quality Staff",
     }
 
     const roleName = roleMapping[fieldId]

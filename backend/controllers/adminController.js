@@ -4,20 +4,20 @@ const User = require("../models/UserModel");
 // 🎯 List of allowed roles
 const rolesEnum = [
   "Admin", "Manager", "Project Manager", "Business Manager",
-  "Financial Leader", "Manufacturing Eng. Manager",
-  "Manufacturing Eng. Leader", "Tooling Manager",
-  "Automation Leader", "SAP Leader", "Methodes UAP1&3",
-  "Methodes UAP2", "Maintenance Manager",
-  "Maintenance Leader UAP2", "Purchasing Manager",
-  "Logistic Manager", "Logistic Leader UAP1",
-  "Logistic Leader UAP2", "Logistic Leader",
-  "POE Administrator", "Material Administrator",
-  "Warehouse Leader UAP1", "Warehouse Leader UAP2",
-  "Prod. Plant Manager UAP1", "Prod. Plant Manager UAP2",
-  "Quality Manager", "Quality Leader UAP1",
-  "Quality Leader UAP2", "Quality Leader UAP3",
-  "Laboratory Leader", "Customer", "User", "PRODUCCION",
-  "LOGISTICA"
+  "Operations director", "Plant manager",
+  "Engineering Manager", "Production Manager",
+  "Controlling Manager", "Financial Manager", "Purchasing Manager",
+  "Quality Manager", "Maintenance Manager",
+  , "Purchasing Manager",
+  "Logistic Manager", "Human Resources Manager",
+  "Maintenance Manager", "Direction Assistant",
+  "Engineering Staff", "Business Staff",
+  "Production Staff", "Controlling Staff",
+  "Maintenance Staff", "Health & Safety Staff",
+  "Quality Manager", "Purchasing Staff",
+  "Logistics Staff", "Quality Staff",
+  "Human Resources Staff", "Customer", "User", "Informatic Systems Staff",
+  "Financial Staff"
 ];
 
 /**
