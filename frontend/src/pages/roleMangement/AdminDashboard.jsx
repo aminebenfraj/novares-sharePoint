@@ -467,19 +467,7 @@ export default function AdminDashboard() {
                   </DialogHeader>
 
                   <form onSubmit={handleCreateUser} className="py-4 space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="license">License ID</Label>
-                        <Input
-                          id="license"
-                          name="license"
-                          placeholder="e.g., LIC-123"
-                          value={newUserData.license}
-                          onChange={handleInputChange}
-                          required
-                        />
-                      </div>
-
+                   
                       <div className="space-y-2">
                         <Label htmlFor="username">Username</Label>
                         <Input
@@ -490,7 +478,6 @@ export default function AdminDashboard() {
                           onChange={handleInputChange}
                           required
                         />
-                      </div>
                     </div>
 
                     <div className="space-y-2">

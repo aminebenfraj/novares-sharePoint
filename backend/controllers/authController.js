@@ -3,26 +3,7 @@ const jwt = require("jsonwebtoken")
 const bcrypt = require("bcryptjs")
 require("dotenv").config()
 
-// Generate JWT Token with improved error handling
-const generateToken = (user) => {
-  try {
-    return jwt.sign(
-      {
-        license: user.license,
-        roles: user.roles,
-        // Add a unique identifier to prevent token reuse issues
-        jti: require("crypto").randomBytes(16).toString("hex"),
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "30d",
-      },
-    )
-  } catch (error) {
-    console.error("Token generation error:", error)
-    throw new Error("Failed to generate authentication token")
-  }
-}
+
 
 // Register a New User with improved validation and error handling
 exports.registerUser = async (req, res) => {
@@ -123,7 +104,7 @@ exports.loginUser = async (req, res) => {
   try {
     const { license, password } = req.body
     // Find user by license and select only necessary fields
-    const user = await User.findOne({ license }).select("license username email roles image password")
+    const user = await User.findOne({ email: license }).select("license username email roles image password")
 
     if (!user) {
       return res.status(400).json({ error: "Invalid license or password" })

@@ -1,5 +1,11 @@
 const bcrypt = require("bcryptjs");
 const User = require("../models/UserModel");
+const { v4: uuidv4 } = require('uuid');
+
+function generateReference(prefix = 'REF') {
+  const uuid = uuidv4().split('-')[0]; // Take just the first part for brevity
+  return `${prefix}-${uuid.toUpperCase()}`;
+}
 
 // 🎯 List of allowed roles
 const rolesEnum = [
@@ -79,9 +85,9 @@ exports.getUserByLicense = async (req, res) => {
  */
 exports.createUser = async (req, res) => {
   try {
-    const { license, username, email, password, roles, image } = req.body;
+    const {  username, email, password, roles, image } = req.body;
 
-    if (!license || !username || !email || !password || !roles) {
+    if ( !username || !email || !password || !roles) {
       return res.status(400).json({ error: "All fields are required" });
     }
 
@@ -89,16 +95,16 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ error: "Invalid roles provided" });
     }
 
-    const existingUser = await User.findOne({ license });
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ error: "User with this license already exists" });
+      return res.status(400).json({ error: "User with this email already exists" });
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const newUser = new User({
-      license,
+      license: generateReference(), // Generate a unique license
       username,
       email,
       password: hashedPassword,
