@@ -446,7 +446,7 @@ export default function SharePointShow() {
 
                       <Select value={approxiDateFilter} onValueChange={setApproxiDateFilter}>
                         <SelectTrigger className="w-[150px]">
-                          <SelectValue placeholder="Approxi Date" />
+                          <SelectValue placeholder="Internal ID" />
                         </SelectTrigger>
                         <SelectContent>
                           {uniqueApproxiDates.map((date) => (
@@ -540,7 +540,7 @@ export default function SharePointShow() {
                           <TableHead>Progress</TableHead>
                           <TableHead>Signers</TableHead>
                           <TableHead>Deadline</TableHead>
-                          <TableHead>Approxi Date</TableHead>
+                          <TableHead>Internal ID</TableHead>
                           <TableHead>Requester Dept.</TableHead>
                           <TableHead>Created By</TableHead>
                           <TableHead className="text-right">Actions</TableHead>

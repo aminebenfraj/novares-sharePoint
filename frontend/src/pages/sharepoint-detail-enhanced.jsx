@@ -432,7 +432,7 @@ export default function SharePointDetailEnhanced({
       <div style="background: #f3f4f6; padding: 10px; border-radius: 8px; display: inline-block;">
         <p style="margin: 0; font-size: 14px; color: #6b7280;">
           <strong>Document ID:</strong> ${sharePoint._id}<br>
-          <strong>Approxi Date:</strong> ${sharePoint.approxiDate || "N/A"}<br>
+          <strong>Internal ID:</strong> ${sharePoint.approxiDate || "N/A"}<br>
           <strong>Generated:</strong> ${new Date().toLocaleString()}<br>
           <strong>Status:</strong> <span style="color: ${sharePoint.status === "completed" ? "#059669" : sharePoint.status === "rejected" || sharePoint.status === "disapproved" ? "#dc2626" : "#d97706"}; font-weight: bold; text-transform: uppercase;">${sharePoint.status.replace("_", " ")}</span>
         </p>
@@ -461,7 +461,7 @@ export default function SharePointDetailEnhanced({
           <p style="margin: 8px 0;"><strong>SharePoint Link:</strong> <span style="font-size: 12px; word-break: break-all;">${sharePoint.link}</span></p>
         </div>
         <div>
-          <p style="margin: 8px 0;"><strong>Approxi Date:</strong> ${sharePoint.approxiDate || "N/A"}</p>
+          <p style="margin: 8px 0;"><strong>Internal ID:</strong> ${sharePoint.approxiDate || "N/A"}</p>
           <p style="margin: 8px 0;"><strong>Total Signers:</strong> ${sharePoint.usersToSign?.length || 0}</p>
           <p style="margin: 8px 0;"><strong>Completed Signatures:</strong> ${sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0}</p>
           <p style="margin: 8px 0;"><strong>Completion:</strong> ${completionPercentage}%</p>
@@ -1562,7 +1562,7 @@ export default function SharePointDetailEnhanced({
                             {/* NEW: Display Approxi Date */}
                             {sharePoint.approxiDate && (
                               <div>
-                                <h3 className="mb-2 text-sm font-medium text-muted-foreground">Approxi Date</h3>
+                                <h3 className="mb-2 text-sm font-medium text-muted-foreground">Internal ID</h3>
                                 <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted">
                                   <Calendar className="w-4 h-4" />
                                   <p className="font-mono font-medium">{sharePoint.approxiDate}</p>
@@ -1960,7 +1960,7 @@ export default function SharePointDetailEnhanced({
                                   <TableCell className="font-mono text-sm">{sharePoint._id}</TableCell>
                                 </TableRow>
                                 <TableRow>
-                                  <TableCell className="font-medium">Approxi Date</TableCell>
+                                  <TableCell className="font-medium">Internal ID</TableCell>
                                   <TableCell className="font-mono text-sm">{sharePoint.approxiDate || "N/A"}</TableCell>
                                 </TableRow>
                                 <TableRow>
@@ -2172,13 +2172,13 @@ export default function SharePointDetailEnhanced({
                         onClick={() => {
                           navigator.clipboard.writeText(sharePoint.approxiDate)
                           toast({
-                            title: "Approxi Date Copied",
-                            description: "Approxi date has been copied to clipboard.",
+                            title: "Internal ID Copied",
+                            description: "Internal ID has been copied to clipboard.",
                           })
                         }}
                       >
                         <Copy className="w-4 h-4 mr-2" />
-                        Copy Approxi Date
+                        Copy Internal ID
                       </Button>
                     )}
                     <Button
