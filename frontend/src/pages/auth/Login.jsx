@@ -40,7 +40,7 @@ const Login = () => {
     try {
       // Validate input
       if (!license.trim()) {
-        setError("License is required")
+        setError("Email is required")
         setIsLoading(false)
         return
       }
@@ -73,7 +73,7 @@ const Login = () => {
           <div className="mt-2 text-sm">
             <p>Having trouble logging in? Try these steps:</p>
             <ul className="pl-5 mt-1 list-disc">
-              <li>Double-check your license and password</li>
+              <li>Double-check your email and password</li>
               <li>Make sure caps lock is off</li>
               <li>Try clearing your browser cache</li>
               <li>Contact support if the issue persists</li>
@@ -95,7 +95,7 @@ const Login = () => {
             </div>
             <CardTitle className="text-2xl font-bold text-center">Login</CardTitle>
             <CardDescription className="text-center">
-              Enter your license and password to access your account
+              Enter your Email and password to access your account
             </CardDescription>
           </CardHeader>
           <CardContent>
