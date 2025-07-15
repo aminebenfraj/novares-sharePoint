@@ -47,6 +47,7 @@ import {
   Shield,
   CheckCircle,
   Activity,
+  AlertTriangle,
 } from "lucide-react"
 import {
   getAllSharePoints,
@@ -55,11 +56,14 @@ import {
   deleteSharePoint,
   approveSharePoint,
   signSharePoint,
+  disapproveSharePoint, // Import disapproveSharePoint
 } from "../apis/sharePointApi"
 import { toast } from "@/hooks/use-toast"
 import { useAuth } from "../context/AuthContext"
 import MainLayout from "../components/MainLayout"
 import { getCurrentUser } from "../apis/auth"
+import { Label } from "@/components/ui/label" // Import Label
+import { Textarea } from "@/components/ui/textarea" // Import Textarea
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -106,6 +110,16 @@ export default function SharePointShow() {
     totalItems: 0,
   })
   const [currentUserInfo, setCurrentUserInfo] = useState(null)
+
+  // New states for disapproval dialog
+  const [showDisapproveDialog, setShowDisapproveDialog] = useState(false)
+  const [disapprovalNote, setDisapprovalNote] = useState("")
+  const [currentDisapproveSharePointId, setCurrentDisapproveSharePointId] = useState(null)
+
+  // New states for manager rejection dialog
+  const [showManagerRejectDialog, setShowManagerRejectDialog] = useState(false)
+  const [managerRejectionNote, setManagerRejectionNote] = useState("")
+  const [currentManagerRejectSharePointId, setCurrentManagerRejectSharePointId] = useState(null)
 
   const uniqueApproxiDates = useMemo(() => {
     const dates = new Set(sharePoints.map((sp) => sp.approxiDate).filter(Boolean))
@@ -226,15 +240,20 @@ export default function SharePointShow() {
     }
   }
 
+  // Modified handleApprove to include manager rejection comment
   const handleApprove = async (id, approved) => {
     try {
       setIsSubmitting(true)
-      await approveSharePoint(id, approved)
+      const comment = approved ? "" : managerRejectionNote.trim() // Use managerRejectionNote for rejection
+      await approveSharePoint(id, approved, comment)
       toast({
         title: approved ? "Document Approved" : "Document Rejected",
         description: approved ? "Document has been approved successfully." : "Document has been rejected.",
       })
       loadSharePoints()
+      setShowManagerRejectDialog(false) // Close dialog on success
+      setManagerRejectionNote("") // Clear comment
+      setCurrentManagerRejectSharePointId(null) // Clear current ID
     } catch (error) {
       console.error("Error approving document:", error)
       toast({
@@ -268,6 +287,31 @@ export default function SharePointShow() {
     }
   }
 
+  // New function to handle user disapproval with comment
+  const handleUserDisapproveFromShow = async () => {
+    try {
+      setIsSubmitting(true)
+      await disapproveSharePoint(currentDisapproveSharePointId, disapprovalNote.trim())
+      toast({
+        title: "Document Disapproved",
+        description: "You have disapproved this document. The document has been cancelled.",
+      })
+      loadSharePoints()
+      setShowDisapproveDialog(false)
+      setDisapprovalNote("")
+      setCurrentDisapproveSharePointId(null)
+    } catch (err) {
+      console.error("Error disapproving document:", err)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to disapprove the document. Please try again.",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const getStatusColor = (status) => {
     switch (status) {
       case "completed":
@@ -283,6 +327,8 @@ export default function SharePointShow() {
       case "cancelled":
         return "bg-gray-50 text-gray-700 border-gray-200"
       case "rejected":
+        return "bg-red-50 text-red-700 border-red-200"
+      case "disapproved": // Added disapproved status color
         return "bg-red-50 text-red-700 border-red-200"
       default:
         return "bg-gray-50 text-gray-700 border-gray-200"
@@ -305,6 +351,8 @@ export default function SharePointShow() {
         return <XCircle className="w-3 h-3" />
       case "rejected":
         return <XCircle className="w-3 h-3" />
+      case "disapproved": // Added disapproved status icon
+        return <AlertTriangle className="w-3 h-3" />
       default:
         return <AlertCircle className="w-3 h-3" />
     }
@@ -441,6 +489,7 @@ export default function SharePointShow() {
                           <SelectItem value="completed">Completed</SelectItem>
                           <SelectItem value="expired">Expired</SelectItem>
                           <SelectItem value="rejected">Rejected</SelectItem>
+                          <SelectItem value="disapproved">Disapproved</SelectItem> {/* Added disapproved filter */}
                         </SelectContent>
                       </Select>
 
@@ -573,6 +622,16 @@ export default function SharePointShow() {
                           const hasUserSigned = userSigner?.hasSigned || false
                           const hasUserDisapproved = userSigner?.hasDisapproved || false
 
+                          // Determine if user can sign or disapprove
+                          const canUserAct =
+                            sharePoint?.managerApproved &&
+                            userSigner &&
+                            !hasUserSigned &&
+                            !hasUserDisapproved &&
+                            sharePoint.status !== "disapproved" &&
+                            sharePoint.status !== "rejected" &&
+                            sharePoint.status !== "cancelled"
+
                           return (
                             <TableRow key={sharePoint._id}>
                               <TableCell>
@@ -690,9 +749,27 @@ export default function SharePointShow() {
                                           </DialogFooter>
                                         </DialogContent>
                                       </Dialog>
-                                      <Dialog>
+                                      <Dialog
+                                        open={
+                                          showManagerRejectDialog && currentManagerRejectSharePointId === sharePoint._id
+                                        }
+                                        onOpenChange={(open) => {
+                                          setShowManagerRejectDialog(open)
+                                          if (!open) {
+                                            setManagerRejectionNote("")
+                                            setCurrentManagerRejectSharePointId(null)
+                                          }
+                                        }}
+                                      >
                                         <DialogTrigger asChild>
-                                          <Button size="sm" variant="destructive">
+                                          <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            onClick={() => {
+                                              setCurrentManagerRejectSharePointId(sharePoint._id)
+                                              setShowManagerRejectDialog(true)
+                                            }}
+                                          >
                                             <XCircle className="w-4 h-4" />
                                           </Button>
                                         </DialogTrigger>
@@ -700,16 +777,42 @@ export default function SharePointShow() {
                                           <DialogHeader>
                                             <DialogTitle>Reject Document</DialogTitle>
                                             <DialogDescription>
-                                              Are you sure you want to reject "{sharePoint.title}"?
+                                              Are you sure you want to reject "{sharePoint.title}"? The creator will be
+                                              able to relaunch it.
                                             </DialogDescription>
                                           </DialogHeader>
+                                          <div className="mt-4 space-y-4">
+                                            <div className="space-y-2">
+                                              <Label htmlFor="manager-rejection-note">Reason for Rejection *</Label>
+                                              <Textarea
+                                                id="manager-rejection-note"
+                                                placeholder="Explain why you are rejecting this document..."
+                                                value={managerRejectionNote}
+                                                onChange={(e) => setManagerRejectionNote(e.target.value)}
+                                                className="min-h-[100px]"
+                                                required
+                                              />
+                                              <p className="text-xs text-muted-foreground">
+                                                Your comment will be visible to the creator and saved in the document
+                                                history.
+                                              </p>
+                                            </div>
+                                          </div>
                                           <DialogFooter>
-                                            <Button variant="outline" disabled={isSubmitting}>
+                                            <Button
+                                              variant="outline"
+                                              onClick={() => {
+                                                setShowManagerRejectDialog(false)
+                                                setManagerRejectionNote("")
+                                                setCurrentManagerRejectSharePointId(null)
+                                              }}
+                                              disabled={isSubmitting}
+                                            >
                                               Cancel
                                             </Button>
                                             <Button
                                               onClick={() => handleApprove(sharePoint._id, false)}
-                                              disabled={isSubmitting}
+                                              disabled={isSubmitting || !managerRejectionNote.trim()}
                                               variant="destructive"
                                             >
                                               {isSubmitting ? "Rejecting..." : "Reject"}
@@ -720,10 +823,8 @@ export default function SharePointShow() {
                                     </div>
                                   )}
 
-                                  {sharePoint?.managerApproved &&
-                                    userSigner &&
-                                    !hasUserSigned &&
-                                    !hasUserDisapproved && (
+                                  {canUserAct && (
+                                    <>
                                       <Button
                                         size="sm"
                                         onClick={() => handleQuickSign(sharePoint._id)}
@@ -731,7 +832,88 @@ export default function SharePointShow() {
                                       >
                                         <CheckCircle className="w-4 h-4" />
                                       </Button>
-                                    )}
+                                      <Dialog
+                                        open={showDisapproveDialog && currentDisapproveSharePointId === sharePoint._id}
+                                        onOpenChange={(open) => {
+                                          setShowDisapproveDialog(open)
+                                          if (!open) {
+                                            setDisapprovalNote("")
+                                            setCurrentDisapproveSharePointId(null)
+                                          }
+                                        }}
+                                      >
+                                        <DialogTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            onClick={() => {
+                                              setCurrentDisapproveSharePointId(sharePoint._id)
+                                              setShowDisapproveDialog(true)
+                                            }}
+                                            disabled={isSubmitting}
+                                          >
+                                            <XCircle className="w-4 h-4" />
+                                          </Button>
+                                        </DialogTrigger>
+                                        <DialogContent>
+                                          <DialogHeader>
+                                            <DialogTitle>Disapprove Document</DialogTitle>
+                                            <DialogDescription>
+                                              You are about to disapprove "{sharePoint.title}". This will cancel the
+                                              document and notify the creator.
+                                            </DialogDescription>
+                                          </DialogHeader>
+                                          <div className="mt-4 space-y-4">
+                                            <div className="p-4 border rounded-lg border-amber-200 bg-amber-50">
+                                              <div className="flex items-center gap-2 mb-2">
+                                                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                                                <span className="text-sm font-medium text-amber-700">Important</span>
+                                              </div>
+                                              <p className="text-xs text-amber-600">
+                                                Disapproving will cancel the document for all users. The creator can
+                                                then make changes and relaunch it.
+                                              </p>
+                                            </div>
+                                            <div className="space-y-2">
+                                              <Label htmlFor="disapproval-note">Reason for Disapproval *</Label>
+                                              <Textarea
+                                                id="disapproval-note"
+                                                placeholder="Please explain why you are disapproving this document. Be specific about what needs to be changed..."
+                                                value={disapprovalNote}
+                                                onChange={(e) => setDisapprovalNote(e.target.value)}
+                                                className="min-h-[120px]"
+                                                required
+                                              />
+                                              <p className="text-xs text-muted-foreground">
+                                                Your feedback will help the creator understand what needs to be improved
+                                                and will be saved in the document history.
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <DialogFooter>
+                                            <Button
+                                              variant="outline"
+                                              onClick={() => {
+                                                setShowDisapproveDialog(false)
+                                                setDisapprovalNote("")
+                                                setCurrentDisapproveSharePointId(null)
+                                              }}
+                                              disabled={isSubmitting}
+                                            >
+                                              Cancel
+                                            </Button>
+                                            <Button
+                                              variant="destructive"
+                                              onClick={handleUserDisapproveFromShow}
+                                              disabled={isSubmitting || !disapprovalNote.trim()}
+                                            >
+                                              {isSubmitting ? "Disapproving..." : "Disapprove Document"}
+                                            </Button>
+                                          </DialogFooter>
+                                        </DialogContent>
+                                      </Dialog>
+                                    </>
+                                  )}
 
                                   <Button variant="outline" size="sm" onClick={() => handleViewDetail(sharePoint._id)}>
                                     <Eye className="w-4 h-4" />

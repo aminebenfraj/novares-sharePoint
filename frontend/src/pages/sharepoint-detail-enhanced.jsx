@@ -237,8 +237,21 @@ export default function SharePointDetailEnhanced({
     )
   })
 
-  const canUserApprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved
-  const canUserDisapprove = hasManagerApproved && userSigner && !userSigner.hasSigned && !userSigner.hasDisapproved
+  // Updated conditions for user approval/disapproval
+  const canUserApprove =
+    hasManagerApproved &&
+    userSigner &&
+    !userSigner.hasSigned &&
+    !userSigner.hasDisapproved &&
+    !isDisapproved &&
+    !isRejected
+  const canUserDisapprove =
+    hasManagerApproved &&
+    userSigner &&
+    !userSigner.hasSigned &&
+    !userSigner.hasDisapproved &&
+    !isDisapproved &&
+    !isRejected
 
   // User approval (after manager approval) - Enhanced with comment
   const handleUserApprove = async () => {
