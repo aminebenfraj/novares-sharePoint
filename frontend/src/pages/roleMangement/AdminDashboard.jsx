@@ -719,7 +719,6 @@ export default function AdminDashboard() {
               <TabsList>
                 <TabsTrigger value="all-users">All Users</TabsTrigger>
                 <TabsTrigger value="admin-users">Admins</TabsTrigger>
-                <TabsTrigger value="customer-users">Customers</TabsTrigger>
               </TabsList>
 
               <div className="flex flex-col gap-2 sm:flex-row">

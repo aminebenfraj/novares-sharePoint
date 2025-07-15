@@ -839,14 +839,14 @@ export default function SharePointCreateEnhanced() {
                               <Calendar className="absolute w-4 h-4 left-3 top-3 text-muted-foreground" />
                               <Input
                                 id="deadline"
-                                type="datetime-local"
+                                type="date"
                                 value={formData.deadline}
                                 onChange={(e) => handleInputChange("deadline", e.target.value)}
                                 className={cn(
                                   "pl-10 transition-all duration-200",
                                   errors.deadline && "border-destructive focus:border-destructive",
                                 )}
-                                min={new Date().toISOString().slice(0, 16)}
+                                min={new Date().toISOString().split("T")[0]}
                               />
                             </div>
                             {errors.deadline && (

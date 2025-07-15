@@ -1,5 +1,5 @@
 
-import { getCurrentUser, updateCurrentUser, deleteCurrentUser } from "../../apis/userApi"
+import { getCurrentUser, updateCurrentUser } from "../../apis/userApi"
 import { toast } from "@/hooks/use-toast"
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
@@ -9,20 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { Separator } from "@/components/ui/separator"
+
 import { useNavigate } from "react-router-dom"
-import { User, Mail, Lock, Upload, AlertTriangle } from "lucide-react"
+import { User, Mail, Lock} from "lucide-react"
 import MainLayout from "@/components/MainLayout"
 
 const SettingsPage = () => {
@@ -175,29 +164,7 @@ const SettingsPage = () => {
     }
   }
 
-  const handleDeleteAccount = async () => {
-    try {
-      await deleteCurrentUser()
-
-      // Clear local storage and redirect to login
-      localStorage.removeItem("accessToken")
-
-      toast({
-        title: "Account deleted",
-        description: "Your account has been deleted successfully.",
-      })
-
-      // Redirect to login page
-      navigate("/login")
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Failed to delete account",
-        description: "Please try again later.",
-      })
-      console.error(err)
-    }
-  }
+  
 
   const getInitials = (name) => {
     return name
@@ -359,39 +326,7 @@ const SettingsPage = () => {
                       "Update Password"
                     )}
                   </Button>
-
-                  <Separator className="my-6" />
-
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-medium">Danger Zone</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Once you delete your account, there is no going back. Please be certain.
-                    </p>
-
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="destructive" className="w-full">
-                          <AlertTriangle className="w-4 h-4 mr-2" />
-                          Delete Account
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete your account and remove your data
-                            from our servers.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleDeleteAccount} className="bg-red-600 hover:bg-red-700">
-                            Delete Account
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
+               
                 </CardContent>
               </Card>
               <Button variant="outline" size="sm" className="w-full mt-4" onClick={() => navigate("/profile")}>
