@@ -107,7 +107,7 @@ const Login = () => {
             )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="license">License</Label>
+                <Label htmlFor="license">email</Label>
                 <Input
                   id="license"
                   type="text"
@@ -144,12 +144,6 @@ const Login = () => {
             </form>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <p className="text-sm text-center text-gray-500">
-              Don't have an account?{" "}
-              <Link to="/register" className="font-medium text-blue-600 hover:underline">
-                Register
-              </Link>
-            </p>
           </CardFooter>
         </Card>
       </div>

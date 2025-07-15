@@ -5,7 +5,7 @@ import Unauthorized from "./pages/auth/Unauthorized"
 
 // Auth Pages
 import Login from "./pages/auth/Login"
-import Register from "./pages/auth/Register"
+// import Register from "./pages/auth/Register"
 
 // Admin Pages
 import AdminDashboard from "./pages/roleMangement/AdminDashboard"
@@ -52,7 +52,7 @@ function App() {
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        {/* <Route path="/register" element={<Register />} /> */}
         <Route path="/unauthorized" element={<Unauthorized />} />
 
         {/* Home route - redirect to sharepoint list */}
