@@ -500,7 +500,7 @@ export default function SharePointShow() {
                         <SelectContent>
                           {uniqueApproxiDates.map((date) => (
                             <SelectItem key={date} value={date}>
-                              {date === "all" ? "All Dates" : date}
+                              {date === "all" ? "Internal ID" : date}
                             </SelectItem>
                           ))}
                         </SelectContent>
