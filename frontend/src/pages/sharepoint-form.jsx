@@ -15,25 +15,7 @@ import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  Calendar,
-  Users,
-  FileText,
-  LinkIcon,
-  AlertCircle,
-  CheckCircle2,
-  Send,
-  X,
-  ArrowLeft,
-  Clock,
-  Target,
-  MessageSquare,
-  Check,
-  Loader2,
-  Shield,
-  Search,
-  Building2,
-} from "lucide-react"
+import { Calendar, Users, FileText, LinkIcon, AlertCircle, CheckCircle2, Send, X, ArrowLeft, Clock, Target, MessageSquare, Check, Loader2, Shield, Search, Building2 } from 'lucide-react'
 import { createSharePoint } from "../apis/sharePointApi"
 import { getAllUsers } from "../apis/admin"
 import { toast } from "@/hooks/use-toast"
@@ -839,14 +821,14 @@ export default function SharePointCreateEnhanced() {
                               <Calendar className="absolute w-4 h-4 left-3 top-3 text-muted-foreground" />
                               <Input
                                 id="deadline"
-                                type="date"
+                                type="datetime-local"
                                 value={formData.deadline}
                                 onChange={(e) => handleInputChange("deadline", e.target.value)}
                                 className={cn(
                                   "pl-10 transition-all duration-200",
                                   errors.deadline && "border-destructive focus:border-destructive",
                                 )}
-                                min={new Date().toISOString().split("T")[0]}
+                                min={new Date().toISOString().slice(0, 16)}
                               />
                             </div>
                             {errors.deadline && (
@@ -855,6 +837,9 @@ export default function SharePointCreateEnhanced() {
                                 {errors.deadline}
                               </p>
                             )}
+                            <p className="text-xs text-muted-foreground">
+                              Select both the date and time for when this document approval should be completed
+                            </p>
                           </div>
 
                           <div className="space-y-2">

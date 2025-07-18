@@ -32,6 +32,7 @@ const calculateCompletionData = (sharePoint) => {
 
   const allUsersSigned = totalSigners > 0 && signedCount === totalSigners
   const hasDisapprovals = disapprovedCount > 0
+  const isExpired = sharePoint.deadline && new Date(sharePoint.deadline) < new Date()
 
   let status = sharePoint.status
 
@@ -42,11 +43,14 @@ const calculateCompletionData = (sharePoint) => {
   } else if (!sharePoint.managerApproved && sharePoint.status === "pending_approval") {
     status = "pending_approval"
   } else if (allUsersSigned && sharePoint.managerApproved) {
+    // 🔧 FIX: When document is fully completed, it stays "completed" regardless of deadline
     status = "completed"
   } else if (signedCount > 0 && sharePoint.managerApproved) {
-    status = "in_progress"
+    // Check if expired only for in-progress documents
+    status = isExpired ? "expired" : "in_progress"
   } else if (sharePoint.managerApproved) {
-    status = "pending"
+    // Check if expired only for pending documents
+    status = isExpired ? "expired" : "pending"
   } else {
     status = "pending_approval"
   }
@@ -207,6 +211,7 @@ exports.createSharePoint = async (req, res) => {
     res.status(500).json({ error: "Error creating SharePoint" })
   }
 }
+
 // Manager approves document - Email to assigned users
 exports.approveSharePoint = async (req, res) => {
   try {
@@ -340,7 +345,6 @@ exports.approveSharePoint = async (req, res) => {
     res.status(500).json({ error: "Error approving SharePoint" })
   }
 }
-
 
 // User signs document - Check if all signed, then email creator completion
 exports.signSharePoint = async (req, res) => {
