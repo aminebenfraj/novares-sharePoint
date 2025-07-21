@@ -516,41 +516,6 @@ export default function EditUserRoles() {
                           className="max-w-md"
                         />
                       </motion.div>
-
-                      <motion.div variants={slideUp} className="space-y-2">
-                        <Label htmlFor="image" className="flex items-center gap-2">
-                          <ImageIcon className="w-4 h-4 text-muted-foreground" />
-                          Profile Image URL
-                        </Label>
-                        <div className="flex max-w-md gap-2">
-                          <Input
-                            id="image"
-                            name="image"
-                            value={formData.image || ""}
-                            onChange={handleChange}
-                            placeholder="https://example.com/avatar.jpg"
-                          />
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() => setFormData((prev) => ({ ...prev, image: "" }))}
-                                  disabled={!formData.image}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Clear image URL</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <p className="text-xs text-muted-foreground">Leave empty to use system default avatar</p>
-                      </motion.div>
                     </motion.div>
                   </TabsContent>
 
