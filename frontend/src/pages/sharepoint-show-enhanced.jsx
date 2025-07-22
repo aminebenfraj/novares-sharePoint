@@ -256,11 +256,21 @@ export default function SharePointShow() {
       setCurrentManagerRejectSharePointId(null) // Clear current ID
     } catch (error) {
       console.error("Error approving document:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to process approval.",
-      })
+
+      // 🔧 NEW: Handle expiration error specifically
+      if (error.response?.data?.code === "DOCUMENT_EXPIRED") {
+        toast({
+          variant: "destructive",
+          title: "Document Expired",
+          description: "This document has expired. The creator must relaunch it with a new deadline.",
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to process approval.",
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -277,11 +287,21 @@ export default function SharePointShow() {
       loadSharePoints()
     } catch (error) {
       console.error("Error signing document:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to sign the document.",
-      })
+
+      // 🔧 NEW: Handle expiration error specifically
+      if (error.response?.data?.code === "DOCUMENT_EXPIRED") {
+        toast({
+          variant: "destructive",
+          title: "Document Expired",
+          description: "This document has expired. Please wait for the creator to relaunch it with a new deadline.",
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to sign the document.",
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -302,11 +322,21 @@ export default function SharePointShow() {
       setCurrentDisapproveSharePointId(null)
     } catch (err) {
       console.error("Error disapproving document:", err)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to disapprove the document. Please try again.",
-      })
+
+      // 🔧 NEW: Handle expiration error specifically
+      if (err.response?.data?.code === "DOCUMENT_EXPIRED") {
+        toast({
+          variant: "destructive",
+          title: "Document Expired",
+          description: "This document has expired. Please wait for the creator to relaunch it with a new deadline.",
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to disapprove the document. Please try again.",
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -627,7 +657,7 @@ export default function SharePointShow() {
                           const hasUserSigned = userSigner?.hasSigned || false
                           const hasUserDisapproved = userSigner?.hasDisapproved || false
 
-                          // Determine if user can sign or disapprove
+                          // 🔧 NEW: Determine if user can sign or disapprove (not if expired)
                           const canUserAct =
                             sharePoint?.managerApproved &&
                             userSigner &&
@@ -635,7 +665,8 @@ export default function SharePointShow() {
                             !hasUserDisapproved &&
                             sharePoint.status !== "disapproved" &&
                             sharePoint.status !== "rejected" &&
-                            sharePoint.status !== "cancelled"
+                            sharePoint.status !== "cancelled" &&
+                            sharePoint.status !== "expired" // 🔧 NEW: Can't act on expired documents
 
                           return (
                             <TableRow key={sharePoint._id}>
@@ -727,7 +758,8 @@ export default function SharePointShow() {
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-2">
-                                  {canApprove && (
+                                  {/* 🔧 NEW: Don't show manager approval buttons for expired documents */}
+                                  {canApprove && !isExpired && (
                                     <div className="flex gap-1">
                                       <Dialog>
                                         <DialogTrigger asChild>
@@ -829,6 +861,14 @@ export default function SharePointShow() {
                                     </div>
                                   )}
 
+                                  {/* 🔧 NEW: Show expired message for manager approval buttons */}
+                                  {canApprove && isExpired && (
+                                    <div className="flex items-center gap-2 px-2 py-1 text-xs text-red-600 border border-red-200 rounded bg-red-50">
+                                      <Timer className="w-3 h-3" />
+                                      <span>Expired - Creator must relaunch</span>
+                                    </div>
+                                  )}
+
                                   {canUserAct && (
                                     <>
                                       <Button
@@ -920,6 +960,18 @@ export default function SharePointShow() {
                                       </Dialog>
                                     </>
                                   )}
+
+                                  {/* 🔧 NEW: Show expired message for user action buttons */}
+                                  {sharePoint?.managerApproved &&
+                                    userSigner &&
+                                    !hasUserSigned &&
+                                    !hasUserDisapproved &&
+                                    sharePoint.status === "expired" && (
+                                      <div className="flex items-center gap-2 px-2 py-1 text-xs text-red-600 border border-red-200 rounded bg-red-50">
+                                        <Timer className="w-3 h-3" />
+                                        <span>Expired - Wait for relaunch</span>
+                                      </div>
+                                    )}
 
                                   <Button variant="outline" size="sm" onClick={() => handleViewDetail(sharePoint._id)}>
                                     <Eye className="w-4 h-4" />

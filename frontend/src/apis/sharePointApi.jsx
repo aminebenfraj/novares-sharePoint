@@ -46,6 +46,7 @@ export const createSharePoint = (data) => {
     externalEmails: externalEmails || [],
   })
 }
+
 // Get all SharePoint documents with enhanced filtering and pagination
 export const getAllSharePoints = (filters = {}) => {
   const queryParams = new URLSearchParams()
@@ -173,10 +174,36 @@ export const disapproveSharePoint = (id, disapprovalNote) => {
 }
 
 // Enhanced: Relaunch a disapproved SharePoint document with optional comment
-export const relaunchSharePoint = (id, relaunchComment = "") => {
-  return apiRequest("POST", `${BASE_URL}/${id}/relaunch`, {
-    relaunchComment: relaunchComment.trim(),
-  })
+export const relaunchSharePoint = (id, relaunchData) => {
+  // Handle both old format (string) and new format (object)
+  let relaunchComment = ""
+  let requestBody = {}
+
+  if (typeof relaunchData === "string") {
+    // Old format: relaunchSharePoint(id, "comment string")
+    relaunchComment = relaunchData
+    requestBody = {
+      relaunchComment: relaunchComment.trim(),
+    }
+  } else if (typeof relaunchData === "object" && relaunchData !== null) {
+    // New format: relaunchSharePoint(id, { relaunchComment: "comment", newDeadline: "date" })
+    relaunchComment = relaunchData.relaunchComment || ""
+    requestBody = {
+      relaunchComment: relaunchComment.trim(),
+    }
+
+    // Add new deadline if provided
+    if (relaunchData.newDeadline) {
+      requestBody.newDeadline = relaunchData.newDeadline
+    }
+  } else {
+    // Fallback for undefined/null
+    requestBody = {
+      relaunchComment: "",
+    }
+  }
+
+  return apiRequest("POST", `${BASE_URL}/${id}/relaunch`, requestBody)
 }
 
 // Get SharePoint statistics

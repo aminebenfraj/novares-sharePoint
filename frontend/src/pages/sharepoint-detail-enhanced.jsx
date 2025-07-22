@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import {
   Dialog,
   DialogContent,
@@ -124,6 +125,7 @@ export default function SharePointDetailEnhanced({
   const [disapprovalNote, setDisapprovalNote] = useState("")
   const [managerApprovalNote, setManagerApprovalNote] = useState("")
   const [relaunchComment, setRelaunchComment] = useState("")
+  const [newDeadline, setNewDeadline] = useState("") // 🔧 NEW: State for new deadline
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showApproveDialog, setShowApproveDialog] = useState(false)
   const [showManagerApproveDialog, setShowManagerApproveDialog] = useState(false)
@@ -195,14 +197,39 @@ export default function SharePointDetailEnhanced({
   }
 
   // After sharePoint data is loaded, calculate all derived values in proper order
-  const isExpired = sharePoint && new Date(sharePoint.deadline) < new Date()
+  const isExpired =
+    sharePoint && sharePoint.deadline && new Date(sharePoint.deadline) < new Date() && sharePoint.status !== "completed"
   const completionPercentage = sharePoint?.completionPercentage || 0
-  const canEdit = sharePoint?.createdBy?.license === activeUser?.license || activeUser?.roles?.includes("Admin")
+  // Enhanced logic to check if current user can edit the document
+  const canEdit = (() => {
+    // Admin users can always edit
+    if (activeUser?.roles?.includes("Admin")) {
+      return true
+    }
+
+    // Check if current user is the creator of the document
+    const currentUserId = currentUserInfo?._id || activeUser?._id
+    const currentUserUsername = currentUserInfo?.username || activeUser?.username
+    const currentUserLicense = currentUserInfo?.license || activeUser?.license
+
+    const creatorId = sharePoint?.createdBy?._id
+    const creatorUsername = sharePoint?.createdBy?.username
+    const creatorLicense = sharePoint?.createdBy?.license
+
+    // Check multiple identifiers to ensure proper matching
+    return (
+      (currentUserId && creatorId && String(currentUserId) === String(creatorId)) ||
+      (currentUserUsername && creatorUsername && String(currentUserUsername) === String(creatorUsername)) ||
+      (currentUserLicense && creatorLicense && String(currentUserLicense) === String(creatorLicense))
+    )
+  })()
   const hasManagerApproved = sharePoint?.managerApproved
   const allApproved = sharePoint?.allUsersSigned
   const isDisapproved = sharePoint?.status === "disapproved" || sharePoint?.status === "cancelled"
   const isRejected = sharePoint?.status === "rejected"
-  const canRelaunch = sharePoint?.createdBy?.license === activeUser?.license && (isDisapproved || isRejected)
+  const canRelaunch =
+    sharePoint?.createdBy?.license === activeUser?.license &&
+    (isDisapproved || isRejected || sharePoint?.status === "expired")
 
   // Calculate user permissions
   const currentUserLicense = currentUserInfo?.license || activeUser?.license
@@ -217,8 +244,9 @@ export default function SharePointDetailEnhanced({
     return managerIdStr === userIdStr || managerIdStr === userLicenseStr
   })
 
-  // NOW declare canManagerApprove after all dependencies are available
-  const canManagerApprove = isSelectedManager && sharePoint?.status === "pending_approval" && !hasManagerApproved
+  // 🔧 ENHANCED: Manager can only approve if document is not expired
+  const canManagerApprove =
+    isSelectedManager && sharePoint?.status === "pending_approval" && !hasManagerApproved && !isExpired
 
   // Find current user as signer
   const userSigner = sharePoint?.usersToSign?.find((signer) => {
@@ -237,21 +265,24 @@ export default function SharePointDetailEnhanced({
     )
   })
 
-  // Updated conditions for user approval/disapproval
+  // 🔧 ENHANCED: Users can only approve/disapprove if document is not expired
   const canUserApprove =
     hasManagerApproved &&
     userSigner &&
     !userSigner.hasSigned &&
     !userSigner.hasDisapproved &&
     !isDisapproved &&
-    !isRejected
+    !isRejected &&
+    !isExpired
+
   const canUserDisapprove =
     hasManagerApproved &&
     userSigner &&
     !userSigner.hasSigned &&
     !userSigner.hasDisapproved &&
     !isDisapproved &&
-    !isRejected
+    !isRejected &&
+    !isExpired
 
   // User approval (after manager approval) - Enhanced with comment
   const handleUserApprove = async () => {
@@ -267,11 +298,21 @@ export default function SharePointDetailEnhanced({
       setApprovalNote("")
     } catch (err) {
       console.error("Error approving document:", err)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to approve the document. Please try again.",
-      })
+
+      // 🔧 ENHANCED: Handle expiration error specifically
+      if (err.response?.data?.code === "DOCUMENT_EXPIRED") {
+        toast({
+          variant: "destructive",
+          title: "Document Expired",
+          description: "This document has expired. Please wait for the creator to relaunch it with a new deadline.",
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to approve the document. Please try again.",
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -291,11 +332,21 @@ export default function SharePointDetailEnhanced({
       setManagerApprovalNote("")
     } catch (err) {
       console.error("Error approving document:", err)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to approve the document. Please try again.",
-      })
+
+      // 🔧 ENHANCED: Handle expiration error specifically
+      if (err.response?.data?.code === "DOCUMENT_EXPIRED") {
+        toast({
+          variant: "destructive",
+          title: "Document Expired",
+          description: "This document has expired. The creator must relaunch it with a new deadline.",
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to approve the document. Please try again.",
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -315,11 +366,21 @@ export default function SharePointDetailEnhanced({
       setDisapprovalNote("")
     } catch (err) {
       console.error("Error disapproving document:", err)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to disapprove the document. Please try again.",
-      })
+
+      // 🔧 ENHANCED: Handle expiration error specifically
+      if (err.response?.data?.code === "DOCUMENT_EXPIRED") {
+        toast({
+          variant: "destructive",
+          title: "Document Expired",
+          description: "This document has expired. Please wait for the creator to relaunch it with a new deadline.",
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to disapprove the document. Please try again.",
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -339,28 +400,52 @@ export default function SharePointDetailEnhanced({
       setDisapprovalNote("")
     } catch (err) {
       console.error("Error rejecting document:", err)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to reject the document. Please try again.",
-      })
+
+      // 🔧 ENHANCED: Handle expiration error specifically
+      if (err.response?.data?.code === "DOCUMENT_EXPIRED") {
+        toast({
+          variant: "destructive",
+          title: "Document Expired",
+          description: "This document has expired. The creator must relaunch it with a new deadline.",
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to reject the document. Please try again.",
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // Relaunch with comment - Enhanced
+  // 🔧 ENHANCED: Relaunch with new deadline support
   const handleRelaunch = async () => {
     try {
       setIsSubmitting(true)
-      await relaunchSharePoint(documentId, relaunchComment.trim())
+
+      // Prepare relaunch data
+      const relaunchData = {
+        relaunchComment: relaunchComment.trim(),
+      }
+
+      // Add new deadline if provided (required for expired documents)
+      if (newDeadline) {
+        relaunchData.newDeadline = newDeadline
+      }
+
+      await relaunchSharePoint(documentId, relaunchData)
       toast({
         title: "Document Relaunched",
-        description: "The document has been sent back to managers for re-approval.",
+        description: newDeadline
+          ? "The document has been relaunched with a new deadline and sent back to managers for re-approval."
+          : "The document has been sent back to managers for re-approval.",
       })
       loadSharePointDetails()
       setShowRelaunchDialog(false)
       setRelaunchComment("")
+      setNewDeadline("")
     } catch (err) {
       console.error("Error relaunching document:", err)
       toast({
@@ -447,7 +532,7 @@ export default function SharePointDetailEnhanced({
           <strong>Document ID:</strong> ${sharePoint._id}<br>
           <strong>Internal ID:</strong> ${sharePoint.approxiDate || "N/A"}<br>
           <strong>Generated:</strong> ${new Date().toLocaleString()}<br>
-          <strong>Status:</strong> <span style="color: ${sharePoint.status === "completed" ? "#059669" : sharePoint.status === "rejected" || sharePoint.status === "disapproved" ? "#dc2626" : "#d97706"}; font-weight: bold; text-transform: uppercase;">${sharePoint.status.replace("_", " ")}</span>
+          <strong>Status:</strong> <span style="color: ${sharePoint.status === "completed" ? "#059669" : sharePoint.status === "rejected" || sharePoint.status === "disapproved" ? "#dc2626" : sharePoint.status === "expired" ? "#dc2626" : "#d97706"}; font-weight: bold; text-transform: uppercase;">${sharePoint.status.replace("_", " ")}</span>
         </p>
       </div>
     `
@@ -479,6 +564,7 @@ export default function SharePointDetailEnhanced({
           <p style="margin: 8px 0;"><strong>Completed Signatures:</strong> ${sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0}</p>
           <p style="margin: 8px 0;"><strong>Completion:</strong> ${completionPercentage}%</p>
           <p style="margin: 8px 0;"><strong>Manager Approved:</strong> ${hasManagerApproved ? "✅ Yes" : "❌ No"}</p>
+          <p style="margin: 8px 0;"><strong>Is Expired:</strong> ${isExpired ? "⚠️ Yes" : "✅ No"}</p>
         </div>
       </div>
       ${
@@ -669,7 +755,9 @@ export default function SharePointDetailEnhanced({
               ? "#dc2626"
               : event.action === "relaunched"
                 ? "#2563eb"
-                : "#6b7280"
+                : event.action === "expired"
+                  ? "#dc2626"
+                  : "#6b7280"
 
         historyHTML += `
         <div style="margin: 12px 0; padding: 15px; background: white; border-radius: 6px; border: 1px solid #e5e7eb; position: relative;">
@@ -688,7 +776,7 @@ export default function SharePointDetailEnhanced({
             </div>
             <p style="margin: 4px 0; color: #374151;">${event.details}</p>
             <p style="margin: 4px 0; font-size: 14px; color: #6b7280;">
-              <strong>Performed by:</strong> ${event.performedBy?.username || "Unknown user"}
+              <strong>Performed by:</strong> ${event.performedBy?.username || "System"}
             </p>
             ${
               event.comment
@@ -719,7 +807,8 @@ export default function SharePointDetailEnhanced({
       footer.innerHTML = `
       <p style="margin: 0;">
         This report was generated automatically from the SharePoint Document Management System<br>
-        Generated on: ${new Date().toLocaleString()} | Document ID: ${sharePoint._id} | Approxi Date: ${sharePoint.approxiDate || "N/A"}
+        Generated on: ${new Date().toLocaleString()} | Document ID: ${sharePoint._id} | Approxi Date: ${sharePoint.approxiDate || "N/A"}<br>
+        Status: ${sharePoint.status.toUpperCase()} | Expired: ${isExpired ? "YES" : "NO"}
       </p>
     `
 
@@ -901,6 +990,12 @@ export default function SharePointDetailEnhanced({
             borderColor = "border-blue-200"
             textColor = "text-blue-700"
             break
+          case "expired":
+            icon = <Timer className="w-4 h-4" />
+            bgColor = "bg-red-50"
+            borderColor = "border-red-200"
+            textColor = "text-red-700"
+            break
           default:
             icon = <MessageCircle className="w-4 h-4" />
             bgColor = "bg-gray-50"
@@ -1081,10 +1176,11 @@ export default function SharePointDetailEnhanced({
                     {getStatusIcon(sharePoint.status)}
                     <span className="ml-1">{sharePoint.status.replace("_", " ").toUpperCase()}</span>
                   </Badge>
-                  {isExpired && !allApproved && (
-                    <Badge variant="destructive">
+                  {/* 🔧 ENHANCED: Show expired badge prominently */}
+                  {isExpired && (
+                    <Badge variant="destructive" className="animate-pulse">
                       <Timer className="w-3 h-3 mr-1" />
-                      Expired
+                      EXPIRED
                     </Badge>
                   )}
                   {hasManagerApproved && (
@@ -1121,6 +1217,36 @@ export default function SharePointDetailEnhanced({
               </div>
             </motion.div>
 
+            {/* 🔧 ENHANCED: Expiration Alert */}
+            {isExpired && (
+              <motion.div variants={itemVariants}>
+                <Alert variant="destructive" className="border-red-300 bg-red-50">
+                  <Timer className="w-4 h-4" />
+                  <AlertTitle className="text-red-800">Document Expired</AlertTitle>
+                  <AlertDescription className="text-red-700">
+                    This document expired on {formatDate(sharePoint.deadline)}.
+                    {canRelaunch ? (
+                      <>
+                        <br />
+                        <strong>
+                          As the creator, you can relaunch this document with a new deadline to restart the approval
+                          process.
+                        </strong>
+                      </>
+                    ) : (
+                      <>
+                        <br />
+                        <strong>
+                          Users cannot approve or disapprove expired documents. The creator must relaunch it with a new
+                          deadline.
+                        </strong>
+                      </>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              </motion.div>
+            )}
+
             {/* Status Alerts */}
             {(isDisapproved || isRejected) && (
               <motion.div variants={itemVariants}>
@@ -1153,7 +1279,7 @@ export default function SharePointDetailEnhanced({
                 <Card>
                   <CardContent className="p-4">
                     <div className="flex flex-col gap-3 sm:flex-row">
-                      {/* Manager Approval/Rejection Buttons */}
+                      {/* Manager Approval/Rejection Buttons - Only show if not expired */}
                       {canManagerApprove && (
                         <div className="flex flex-1 gap-2">
                           <Dialog open={showManagerApproveDialog} onOpenChange={setShowManagerApproveDialog}>
@@ -1252,7 +1378,7 @@ export default function SharePointDetailEnhanced({
                         </div>
                       )}
 
-                      {/* User Approval/Disapproval Buttons */}
+                      {/* User Approval/Disapproval Buttons - Only show if not expired */}
                       {(canUserApprove || canUserDisapprove) && (
                         <div className="flex flex-1 gap-2">
                           {canUserApprove && (
@@ -1274,7 +1400,7 @@ export default function SharePointDetailEnhanced({
                                   <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
                                     <div className="flex items-center gap-2 mb-2">
                                       <Shield className="w-4 h-4 text-blue-600" />
-                                      <span className="text-sm font-medium text-blue-700">Manager Approve</span>
+                                      <span className="text-sm font-medium text-blue-700">Manager Approved</span>
                                     </div>
                                     <p className="text-xs text-blue-600">
                                       This document has been approved by the manager and is ready for your approval.
@@ -1375,7 +1501,7 @@ export default function SharePointDetailEnhanced({
                         </div>
                       )}
 
-                      {/* Relaunch Button */}
+                      {/* 🔧 ENHANCED: Relaunch Button with New Deadline Support */}
                       {canRelaunch && (
                         <div className="flex-1">
                           <Dialog open={showRelaunchDialog} onOpenChange={setShowRelaunchDialog}>
@@ -1385,7 +1511,7 @@ export default function SharePointDetailEnhanced({
                                 Relaunch Document
                               </Button>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className="max-w-2xl">
                               <DialogHeader>
                                 <DialogTitle>Relaunch Document</DialogTitle>
                                 <DialogDescription>
@@ -1405,8 +1531,62 @@ export default function SharePointDetailEnhanced({
                                     <li>• Managers will receive new approval notifications</li>
                                     <li>• Users can approve again once re-approved by manager</li>
                                     <li>• History will be preserved</li>
+                                    {sharePoint?.status === "expired" && (
+                                      <li className="font-medium">• New deadline is required for expired documents</li>
+                                    )}
                                   </ul>
                                 </div>
+
+                                {/* 🔧 NEW: New Deadline Input */}
+                                {(sharePoint?.status === "expired" || isExpired) && (
+                                  <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <Timer className="w-4 h-4 text-red-600" />
+                                      <span className="text-sm font-medium text-red-700">
+                                        Document Expired - New Deadline Required
+                                      </span>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor="new-deadline" className="text-red-700">
+                                        New Deadline *
+                                      </Label>
+                                      <Input
+                                        id="new-deadline"
+                                        type="datetime-local"
+                                        value={newDeadline}
+                                        onChange={(e) => setNewDeadline(e.target.value)}
+                                        min={new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)} // Minimum 24 hours from now
+                                        className="border-red-200 focus:border-red-400"
+                                        required
+                                      />
+                                      <p className="text-xs text-red-600">
+                                        Current deadline: {formatDate(sharePoint.deadline)} (expired)
+                                        <br />
+                                        New deadline must be at least 24 hours in the future.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Optional new deadline for non-expired documents */}
+                                {sharePoint?.status !== "expired" && !isExpired && (
+                                  <div className="space-y-2">
+                                    <Label htmlFor="optional-new-deadline">Update Deadline (Optional)</Label>
+                                    <Input
+                                      id="optional-new-deadline"
+                                      type="datetime-local"
+                                      value={newDeadline}
+                                      onChange={(e) => setNewDeadline(e.target.value)}
+                                      min={new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                      Current deadline: {formatDate(sharePoint.deadline)}
+                                      <br />
+                                      Leave empty to keep the current deadline.
+                                    </p>
+                                  </div>
+                                )}
+
                                 <div className="space-y-2">
                                   <Label htmlFor="relaunch-comment">Relaunch Comment</Label>
                                   <Textarea
@@ -1424,12 +1604,21 @@ export default function SharePointDetailEnhanced({
                               <DialogFooter>
                                 <Button
                                   variant="outline"
-                                  onClick={() => setShowRelaunchDialog(false)}
+                                  onClick={() => {
+                                    setShowRelaunchDialog(false)
+                                    setNewDeadline("")
+                                    setRelaunchComment("")
+                                  }}
                                   disabled={isSubmitting}
                                 >
                                   Cancel
                                 </Button>
-                                <Button onClick={handleRelaunch} disabled={isSubmitting}>
+                                <Button
+                                  onClick={handleRelaunch}
+                                  disabled={
+                                    isSubmitting || ((sharePoint?.status === "expired" || isExpired) && !newDeadline)
+                                  }
+                                >
                                   {isSubmitting ? "Relaunching..." : "Relaunch Document"}
                                 </Button>
                               </DialogFooter>
@@ -1439,12 +1628,17 @@ export default function SharePointDetailEnhanced({
                       )}
                     </div>
 
-                    {/* Status Information */}
+                    {/* 🔧 ENHANCED: Status Information with Expiration Details */}
                     <div className="p-3 mt-4 rounded-lg bg-muted">
                       <div className="flex items-center justify-between text-sm">
                         <span>Document Status:</span>
                         <div className="flex items-center gap-2">
-                          {sharePoint.managerApproved ? (
+                          {isExpired ? (
+                            <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50">
+                              <Timer className="w-3 h-3 mr-1" />
+                              Expired - Relaunch Required
+                            </Badge>
+                          ) : sharePoint.managerApproved ? (
                             <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
                               <Shield className="w-3 h-3 mr-1" />
                               Manager Approved
@@ -1477,6 +1671,26 @@ export default function SharePointDetailEnhanced({
                             </Badge>
                           )}
                         </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* 🔧 ENHANCED: Show expiration message when no actions available */}
+            {isExpired && !canRelaunch && !canManagerApprove && !canUserApprove && !canUserDisapprove && (
+              <motion.div variants={itemVariants}>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-center gap-3 p-6 text-center">
+                      <Timer className="w-8 h-8 text-red-500" />
+                      <div>
+                        <h3 className="text-lg font-medium text-red-700">Document Expired</h3>
+                        <p className="text-sm text-red-600">
+                          This document expired on {formatDate(sharePoint.deadline)}. The creator must relaunch it with
+                          a new deadline before any actions can be taken.
+                        </p>
                       </div>
                     </div>
                   </CardContent>
@@ -1572,7 +1786,7 @@ export default function SharePointDetailEnhanced({
                           </div>
 
                           <div className="space-y-4">
-                            {/* NEW: Display Approxi Date */}
+                            {/* Display Approxi Date */}
                             {sharePoint.approxiDate && (
                               <div>
                                 <h3 className="mb-2 text-sm font-medium text-muted-foreground">Internal ID</h3>
@@ -1583,7 +1797,7 @@ export default function SharePointDetailEnhanced({
                               </div>
                             )}
 
-                            {/* NEW: Display Requester Department */}
+                            {/* Display Requester Department */}
                             {sharePoint.requesterDepartment && (
                               <div>
                                 <h3 className="mb-2 text-sm font-medium text-muted-foreground">Requester Department</h3>
@@ -1626,6 +1840,18 @@ export default function SharePointDetailEnhanced({
                                     {hasManagerApproved ? "Yes" : "Pending"}
                                   </Badge>
                                 </div>
+                                {/* 🔧 NEW: Expiration Status */}
+                                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted">
+                                  <span className="text-sm">Document Expired</span>
+                                  <Badge variant={isExpired ? "destructive" : "default"}>
+                                    {isExpired ? (
+                                      <Timer className="w-3 h-3 mr-1" />
+                                    ) : (
+                                      <CheckCircle className="w-3 h-3 mr-1" />
+                                    )}
+                                    {isExpired ? "Yes" : "No"}
+                                  </Badge>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1663,6 +1889,12 @@ export default function SharePointDetailEnhanced({
                           Approval Details ({sharePoint.usersToSign?.filter((u) => u.hasSigned).length || 0}/
                           {sharePoint.usersToSign?.length || 0})
                         </CardTitle>
+                        {/* 🔧 NEW: Show expiration warning in approvers tab */}
+                        {isExpired && (
+                          <CardDescription className="text-red-600">
+                            ⚠️ Document expired - users cannot approve or disapprove until relaunched with new deadline
+                          </CardDescription>
+                        )}
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-4">
@@ -1677,7 +1909,9 @@ export default function SharePointDetailEnhanced({
                                       ? "bg-emerald-50"
                                       : signer.hasDisapproved
                                         ? "bg-red-50"
-                                        : "bg-muted"
+                                        : isExpired
+                                          ? "bg-gray-50"
+                                          : "bg-muted"
                                   }`}
                                 >
                                   <div className="flex items-center gap-3">
@@ -1712,6 +1946,11 @@ export default function SharePointDetailEnhanced({
                                         <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50">
                                           <XCircle className="w-3 h-3 mr-1" />
                                           Disapproved
+                                        </Badge>
+                                      ) : isExpired ? (
+                                        <Badge variant="outline" className="text-gray-600 border-gray-200 bg-gray-50">
+                                          <Timer className="w-3 h-3 mr-1" />
+                                          Expired
                                         </Badge>
                                       ) : (
                                         <Badge
@@ -1886,7 +2125,9 @@ export default function SharePointDetailEnhanced({
                                     event.action === "signed" ||
                                     event.action === "approved"
                                       ? "bg-emerald-100"
-                                      : event.action === "rejected" || event.action === "disapproved"
+                                      : event.action === "rejected" ||
+                                          event.action === "disapproved" ||
+                                          event.action === "expired"
                                         ? "bg-red-100"
                                         : "bg-blue-100"
                                   }`}
@@ -1898,6 +2139,7 @@ export default function SharePointDetailEnhanced({
                                   {event.action === "rejected" && <XCircle className="w-3 h-3 text-red-600" />}
                                   {event.action === "disapproved" && <AlertTriangle className="w-3 h-3 text-red-600" />}
                                   {event.action === "relaunched" && <RotateCcw className="w-3 h-3 text-blue-600" />}
+                                  {event.action === "expired" && <Timer className="w-3 h-3 text-red-600" />}
                                   {event.action === "deadline_extended" && (
                                     <Calendar className="w-3 h-3 text-blue-600" />
                                   )}
@@ -1908,7 +2150,7 @@ export default function SharePointDetailEnhanced({
                                     <span className="text-xs text-muted-foreground">{formatDate(event.timestamp)}</span>
                                   </div>
                                   <p className="text-sm text-muted-foreground">
-                                    {event.performedBy?.username || "Unknown user"} - {event.details}
+                                    {event.performedBy?.username || "System"} - {event.details}
                                   </p>
                                   {event.comment && (
                                     <div className="p-3 mt-2 border rounded-lg bg-muted/50">
@@ -1925,6 +2167,12 @@ export default function SharePointDetailEnhanced({
                                     <div className="p-2 mt-2 border rounded bg-muted/30">
                                       <p className="text-xs text-muted-foreground">
                                         <strong>Action Type:</strong> {event.userAction.type?.replace("_", " ")}
+                                        {event.userAction.newDeadline && (
+                                          <>
+                                            <br />
+                                            <strong>New Deadline:</strong> {formatDate(event.userAction.newDeadline)}
+                                          </>
+                                        )}
                                         {event.userAction.previousDisapprovals &&
                                           event.userAction.previousDisapprovals.length > 0 && (
                                             <>
@@ -1989,6 +2237,21 @@ export default function SharePointDetailEnhanced({
                                   <TableCell>{formatDate(sharePoint.updatedAt)}</TableCell>
                                 </TableRow>
                                 <TableRow>
+                                  <TableCell className="font-medium">Deadline</TableCell>
+                                  <TableCell className={isExpired ? "text-red-600 font-medium" : ""}>
+                                    {formatDate(sharePoint.deadline)}
+                                    {isExpired && " (EXPIRED)"}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="font-medium">Is Expired</TableCell>
+                                  <TableCell>
+                                    <Badge variant={isExpired ? "destructive" : "default"}>
+                                      {isExpired ? "Yes" : "No"}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
                                   <TableCell className="font-medium">Version</TableCell>
                                   <TableCell>{sharePoint.__v || 0}</TableCell>
                                 </TableRow>
@@ -2016,18 +2279,24 @@ export default function SharePointDetailEnhanced({
                       <CardContent className="space-y-6">
                         <div className="grid gap-4 md:grid-cols-2">
                           <Card
-                            className={`p-4 ${hasManagerApproved ? "bg-emerald-50 border-emerald-200" : "bg-muted border-border"}`}
+                            className={`p-4 ${hasManagerApproved ? "bg-emerald-50 border-emerald-200" : isExpired ? "bg-red-50 border-red-200" : "bg-muted border-border"}`}
                           >
                             <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-full ${hasManagerApproved ? "bg-emerald-100" : "bg-muted"}`}>
+                              <div
+                                className={`p-2 rounded-full ${hasManagerApproved ? "bg-emerald-100" : isExpired ? "bg-red-100" : "bg-muted"}`}
+                              >
                                 <Shield
-                                  className={`w-5 h-5 ${hasManagerApproved ? "text-emerald-600" : "text-muted-foreground"}`}
+                                  className={`w-5 h-5 ${hasManagerApproved ? "text-emerald-600" : isExpired ? "text-red-600" : "text-muted-foreground"}`}
                                 />
                               </div>
                               <div>
                                 <h3 className="font-medium">Manager Approval</h3>
                                 <p className="text-sm text-muted-foreground">
-                                  {hasManagerApproved ? "Approved" : "Pending approval"}
+                                  {hasManagerApproved
+                                    ? "Approved"
+                                    : isExpired
+                                      ? "Expired - Cannot approve"
+                                      : "Pending approval"}
                                 </p>
                               </div>
                             </div>
@@ -2043,6 +2312,14 @@ export default function SharePointDetailEnhanced({
                                     <p className="text-sm font-medium">{sharePoint.approvedBy.username}</p>
                                     <p className="text-xs text-muted-foreground">{formatDate(sharePoint.approvedAt)}</p>
                                   </div>
+                                </div>
+                              </div>
+                            )}
+                            {isExpired && !hasManagerApproved && (
+                              <div className="pt-4 mt-4 border-t border-red-200">
+                                <div className="flex items-center gap-2 text-red-600">
+                                  <Timer className="w-4 h-4" />
+                                  <p className="text-sm">Document expired before manager approval</p>
                                 </div>
                               </div>
                             )}
@@ -2108,6 +2385,11 @@ export default function SharePointDetailEnhanced({
                         <span className="text-muted-foreground">Deadline</span>
                         <span className={`font-medium ${isExpired ? "text-red-600" : "text-foreground"}`}>
                           {formatDate(sharePoint.deadline)}
+                          {isExpired && (
+                            <Badge variant="destructive" className="ml-2 text-xs">
+                              EXPIRED
+                            </Badge>
+                          )}
                         </span>
                       </div>
                       {hasManagerApproved && (
