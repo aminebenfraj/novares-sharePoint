@@ -121,6 +121,7 @@ export default function SharePointShow() {
   const [managerRejectionNote, setManagerRejectionNote] = useState("")
   const [currentManagerRejectSharePointId, setCurrentManagerRejectSharePointId] = useState(null)
 
+  // 🔧 FIX: Get unique values from all sharePoints, not just filtered ones
   const uniqueApproxiDates = useMemo(() => {
     const dates = new Set(sharePoints.map((sp) => sp.approxiDate).filter(Boolean))
     return ["all", ...Array.from(dates).sort()]
@@ -144,18 +145,32 @@ export default function SharePointShow() {
     navigate(`/sharepoint/${id}/edit`)
   }
 
-  // Load SharePoints function
+  // 🔧 FIX: Updated loadSharePoints function with proper filter handling
   const loadSharePoints = useCallback(
     async (showLoading = true) => {
       try {
         if (showLoading) setLoading(true)
         let response
 
+        // 🔧 FIX: Send ALL filters to backend, including search and custom filters
         const filters = {
           status: statusFilter !== "all" ? statusFilter : undefined,
           page: pagination.currentPage,
           limit: 12,
+          sortBy,
+          sortOrder,
+          search: searchTerm.trim() || undefined,
+          // 🔧 NEW: Add custom filters to backend request
+          approxiDate: approxiDateFilter !== "all" ? approxiDateFilter : undefined,
+          requesterDepartment: requesterDepartmentFilter !== "all" ? requesterDepartmentFilter : undefined,
         }
+
+        // Remove undefined values to clean up the request
+        Object.keys(filters).forEach((key) => {
+          if (filters[key] === undefined) {
+            delete filters[key]
+          }
+        })
 
         switch (viewFilter) {
           case "assigned":
@@ -185,8 +200,32 @@ export default function SharePointShow() {
         if (showLoading) setLoading(false)
       }
     },
-    [viewFilter, statusFilter, sortBy, sortOrder],
+    [
+      viewFilter,
+      statusFilter,
+      sortBy,
+      sortOrder,
+      searchTerm,
+      approxiDateFilter,
+      requesterDepartmentFilter,
+      pagination.currentPage,
+    ], // 🔧 FIX: Include all filter dependencies
   )
+
+  // 🔧 FIX: Reset pagination when filters change
+  const resetPaginationAndLoad = useCallback(() => {
+    setPagination((prev) => ({ ...prev, currentPage: 1 }))
+  }, [])
+
+  // 🔧 FIX: Separate effect for filter changes that should reset pagination
+  useEffect(() => {
+    resetPaginationAndLoad()
+  }, [viewFilter, statusFilter, sortBy, sortOrder, searchTerm, approxiDateFilter, requesterDepartmentFilter])
+
+  // 🔧 FIX: Effect for loading data when pagination or filters change
+  useEffect(() => {
+    loadSharePoints()
+  }, [loadSharePoints])
 
   // Auto-refresh functionality - always on
   useEffect(() => {
@@ -197,11 +236,6 @@ export default function SharePointShow() {
     setRefreshInterval(interval)
     return () => clearInterval(interval)
   }, [loadSharePoints])
-
-  // Initial load and filter changes
-  useEffect(() => {
-    loadSharePoints()
-  }, [viewFilter, statusFilter, sortBy, sortOrder])
 
   // Fetch current user information
   useEffect(() => {
@@ -217,6 +251,19 @@ export default function SharePointShow() {
 
     fetchCurrentUser()
   }, [])
+
+  // 🔧 FIX: Pagination handlers
+  const handlePreviousPage = () => {
+    if (pagination.currentPage > 1) {
+      setPagination((prev) => ({ ...prev, currentPage: prev.currentPage - 1 }))
+    }
+  }
+
+  const handleNextPage = () => {
+    if (pagination.currentPage < pagination.totalPages) {
+      setPagination((prev) => ({ ...prev, currentPage: prev.currentPage + 1 }))
+    }
+  }
 
   const handleDelete = async (id) => {
     if (!confirm("Are you sure you want to delete this SharePoint document?")) {
@@ -244,20 +291,19 @@ export default function SharePointShow() {
   const handleApprove = async (id, approved) => {
     try {
       setIsSubmitting(true)
-      const comment = approved ? "" : managerRejectionNote.trim() // Use managerRejectionNote for rejection
+      const comment = approved ? "" : managerRejectionNote.trim()
       await approveSharePoint(id, approved, comment)
       toast({
         title: approved ? "Document Approved" : "Document Rejected",
         description: approved ? "Document has been approved successfully." : "Document has been rejected.",
       })
       loadSharePoints()
-      setShowManagerRejectDialog(false) // Close dialog on success
-      setManagerRejectionNote("") // Clear comment
-      setCurrentManagerRejectSharePointId(null) // Clear current ID
+      setShowManagerRejectDialog(false)
+      setManagerRejectionNote("")
+      setCurrentManagerRejectSharePointId(null)
     } catch (error) {
       console.error("Error approving document:", error)
 
-      // 🔧 NEW: Handle expiration error specifically
       if (error.response?.data?.code === "DOCUMENT_EXPIRED") {
         toast({
           variant: "destructive",
@@ -288,7 +334,6 @@ export default function SharePointShow() {
     } catch (error) {
       console.error("Error signing document:", error)
 
-      // 🔧 NEW: Handle expiration error specifically
       if (error.response?.data?.code === "DOCUMENT_EXPIRED") {
         toast({
           variant: "destructive",
@@ -307,7 +352,6 @@ export default function SharePointShow() {
     }
   }
 
-  // New function to handle user disapproval with comment
   const handleUserDisapproveFromShow = async () => {
     try {
       setIsSubmitting(true)
@@ -323,7 +367,6 @@ export default function SharePointShow() {
     } catch (err) {
       console.error("Error disapproving document:", err)
 
-      // 🔧 NEW: Handle expiration error specifically
       if (err.response?.data?.code === "DOCUMENT_EXPIRED") {
         toast({
           variant: "destructive",
@@ -388,13 +431,8 @@ export default function SharePointShow() {
     }
   }
 
-  const filteredSharePoints = sharePoints.filter(
-    (sp) =>
-      (sp?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        sp?.createdBy?.username?.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (approxiDateFilter === "all" || sp?.approxiDate === approxiDateFilter) &&
-      (requesterDepartmentFilter === "all" || sp?.requesterDepartment === requesterDepartmentFilter),
-  )
+  // 🔧 FIX: Remove client-side filtering since we're now filtering on the backend
+  const displayedSharePoints = sharePoints // No more client-side filtering
 
   return (
     <MainLayout>
@@ -592,14 +630,17 @@ export default function SharePointShow() {
                     </div>
                   </CardContent>
                 </Card>
-              ) : filteredSharePoints.length === 0 ? (
+              ) : displayedSharePoints.length === 0 ? (
                 <Card>
                   <CardContent className="p-12 text-center">
                     <FileText className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
                     <h3 className="mb-2 text-xl font-semibold">No documents found</h3>
                     <p className="mb-6 text-muted-foreground">
-                      {searchTerm
-                        ? "Try adjusting your search terms"
+                      {searchTerm ||
+                      statusFilter !== "all" ||
+                      approxiDateFilter !== "all" ||
+                      requesterDepartmentFilter !== "all"
+                        ? "Try adjusting your search terms or filters"
                         : "Create your first SharePoint document to get started"}
                     </p>
                     <Button onClick={handleCreateNew}>
@@ -626,10 +667,9 @@ export default function SharePointShow() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredSharePoints.map((sharePoint) => {
+                        {displayedSharePoints.map((sharePoint) => {
                           if (!sharePoint) return null
 
-                          // 🔧 FIX: Only show expired for non-completed documents
                           const isExpired =
                             sharePoint.deadline &&
                             new Date(sharePoint.deadline) < new Date() &&
@@ -657,7 +697,6 @@ export default function SharePointShow() {
                           const hasUserSigned = userSigner?.hasSigned || false
                           const hasUserDisapproved = userSigner?.hasDisapproved || false
 
-                          // 🔧 NEW: Determine if user can sign or disapprove (not if expired)
                           const canUserAct =
                             sharePoint?.managerApproved &&
                             userSigner &&
@@ -666,7 +705,7 @@ export default function SharePointShow() {
                             sharePoint.status !== "disapproved" &&
                             sharePoint.status !== "rejected" &&
                             sharePoint.status !== "cancelled" &&
-                            sharePoint.status !== "expired" // 🔧 NEW: Can't act on expired documents
+                            sharePoint.status !== "expired"
 
                           return (
                             <TableRow key={sharePoint._id}>
@@ -737,7 +776,6 @@ export default function SharePointShow() {
                                 <span className={isExpired ? "text-red-600 font-medium" : "text-foreground"}>
                                   {sharePoint.deadline ? new Date(sharePoint.deadline).toLocaleDateString() : "N/A"}
                                 </span>
-                                {/* 🔧 FIX: Only show Expired badge for non-completed documents */}
                                 {isExpired && (
                                   <Badge variant="destructive" className="ml-2 text-xs">
                                     Expired
@@ -758,7 +796,6 @@ export default function SharePointShow() {
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-2">
-                                  {/* 🔧 NEW: Don't show manager approval buttons for expired documents */}
                                   {canApprove && !isExpired && (
                                     <div className="flex gap-1">
                                       <Dialog>
@@ -861,7 +898,6 @@ export default function SharePointShow() {
                                     </div>
                                   )}
 
-                                  {/* 🔧 NEW: Show expired message for manager approval buttons */}
                                   {canApprove && isExpired && (
                                     <div className="flex items-center gap-2 px-2 py-1 text-xs text-red-600 border border-red-200 rounded bg-red-50">
                                       <Timer className="w-3 h-3" />
@@ -961,7 +997,6 @@ export default function SharePointShow() {
                                     </>
                                   )}
 
-                                  {/* 🔧 NEW: Show expired message for user action buttons */}
                                   {sharePoint?.managerApproved &&
                                     userSigner &&
                                     !hasUserSigned &&
@@ -1020,24 +1055,20 @@ export default function SharePointShow() {
               )}
             </motion.div>
 
-            {/* Pagination */}
+            {/* 🔧 FIX: Updated Pagination with proper handlers */}
             {pagination.totalPages > 1 && (
               <motion.div variants={itemVariants} className="flex justify-center">
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    disabled={pagination.currentPage === 1}
-                    onClick={() => setPagination((prev) => ({ ...prev, currentPage: prev.currentPage - 1 }))}
-                  >
+                  <Button variant="outline" disabled={pagination.currentPage === 1} onClick={handlePreviousPage}>
                     Previous
                   </Button>
                   <span className="px-4 py-2 text-sm text-muted-foreground">
-                    Page {pagination.currentPage} of {pagination.totalPages}
+                    Page {pagination.currentPage} of {pagination.totalPages} ({pagination.totalItems} total)
                   </span>
                   <Button
                     variant="outline"
                     disabled={pagination.currentPage === pagination.totalPages}
-                    onClick={() => setPagination((prev) => ({ ...prev, currentPage: prev.currentPage + 1 }))}
+                    onClick={handleNextPage}
                   >
                     Next
                   </Button>

@@ -776,6 +776,8 @@ exports.getAllSharePoints = async (req, res) => {
       sortBy = "createdAt",
       sortOrder = "desc",
       search = "",
+      approxiDate,        // 🔧 NEW
+      requesterDepartment // 🔧 NEW
     } = req.query
 
     const filter = {}
@@ -784,21 +786,27 @@ exports.getAllSharePoints = async (req, res) => {
     if (status && status !== "all") filter.status = status
     if (createdBy) filter.createdBy = createdBy
     if (assignedTo) filter["usersToSign.user"] = assignedTo
+    if (approxiDate && approxiDate !== "all") filter.approxiDate = approxiDate           // 🔧 NEW
+    if (requesterDepartment && requesterDepartment !== "all") filter.requesterDepartment = requesterDepartment // 🔧 NEW
 
     if (search) {
-      filter.$or = [{ title: { $regex: search, $options: "i" } }, { comment: { $regex: search, $options: "i" } }]
+      filter.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { comment: { $regex: search, $options: "i" } },
+        { "createdBy.username": { $regex: search, $options: "i" } } // 🔧 NEW: Search by creator
+      ]
     }
 
     sort[sortBy] = sortOrder === "desc" ? -1 : 1
 
-    const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit)
+    const skip = (parseInt(page) - 1) * parseInt(limit)
     const sharePoints = await SharePoint.find(filter)
       .populate("createdBy", "username email roles")
       .populate("usersToSign.user", "username email roles")
       .populate("approvedBy", "username email")
       .sort(sort)
       .skip(skip)
-      .limit(Number.parseInt(limit))
+      .limit(parseInt(limit))
       .lean()
 
     const sharePointsWithCompletion = sharePoints.map((sharePoint) => {
