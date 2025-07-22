@@ -46,10 +46,10 @@ const calculateCompletionData = (sharePoint) => {
     // 🔧 FIX: When document is fully completed, it stays "completed" regardless of deadline
     status = "completed"
   } else if (signedCount > 0 && sharePoint.managerApproved) {
-    // Check if expired only for in-progress documents
+    // 🔧 FIX: Check if expired only for in-progress documents (not completed)
     status = isExpired ? "expired" : "in_progress"
   } else if (sharePoint.managerApproved) {
-    // Check if expired only for pending documents
+    // 🔧 FIX: Check if expired only for pending documents (not completed)
     status = isExpired ? "expired" : "pending"
   } else {
     status = "pending_approval"

@@ -111,7 +111,7 @@ export default function WorkflowStatusIndicator({ sharePoint, onRelaunch }) {
   // Handle cancelled/disapproved state
   if (currentStep === "cancelled" || currentStep === "rejected") {
     const isManagerRejection = currentStep === "rejected"
-    const title = isManagerRejection ? "Manager Rejected Document" : "Document Cancelled"
+    const title = isManagerRejection ? "Manager Rejected Document" : "Document Disapproved"
     const description = isManagerRejection
       ? "This document has been rejected by the manager."
       : "This document has been cancelled due to user disapproval."

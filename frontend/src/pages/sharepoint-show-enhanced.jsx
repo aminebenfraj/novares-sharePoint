@@ -56,14 +56,14 @@ import {
   deleteSharePoint,
   approveSharePoint,
   signSharePoint,
-  disapproveSharePoint, // Import disapproveSharePoint
+  disapproveSharePoint,
 } from "../apis/sharePointApi"
 import { toast } from "@/hooks/use-toast"
 import { useAuth } from "../context/AuthContext"
 import MainLayout from "../components/MainLayout"
 import { getCurrentUser } from "../apis/auth"
-import { Label } from "@/components/ui/label" // Import Label
-import { Textarea } from "@/components/ui/textarea" // Import Textarea
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -328,7 +328,7 @@ export default function SharePointShow() {
         return "bg-gray-50 text-gray-700 border-gray-200"
       case "rejected":
         return "bg-red-50 text-red-700 border-red-200"
-      case "disapproved": // Added disapproved status color
+      case "disapproved":
         return "bg-red-50 text-red-700 border-red-200"
       default:
         return "bg-gray-50 text-gray-700 border-gray-200"
@@ -351,7 +351,7 @@ export default function SharePointShow() {
         return <XCircle className="w-3 h-3" />
       case "rejected":
         return <XCircle className="w-3 h-3" />
-      case "disapproved": // Added disapproved status icon
+      case "disapproved":
         return <AlertTriangle className="w-3 h-3" />
       default:
         return <AlertCircle className="w-3 h-3" />
@@ -489,7 +489,7 @@ export default function SharePointShow() {
                           <SelectItem value="completed">Completed</SelectItem>
                           <SelectItem value="expired">Expired</SelectItem>
                           <SelectItem value="rejected">Rejected</SelectItem>
-                          <SelectItem value="disapproved">Disapproved</SelectItem> {/* Added disapproved filter */}
+                          <SelectItem value="disapproved">Disapproved</SelectItem>
                         </SelectContent>
                       </Select>
 
@@ -599,7 +599,12 @@ export default function SharePointShow() {
                         {filteredSharePoints.map((sharePoint) => {
                           if (!sharePoint) return null
 
-                          const isExpired = sharePoint.deadline && new Date(sharePoint.deadline) < new Date()
+                          // 🔧 FIX: Only show expired for non-completed documents
+                          const isExpired =
+                            sharePoint.deadline &&
+                            new Date(sharePoint.deadline) < new Date() &&
+                            sharePoint.status !== "completed"
+
                           const completionPercentage = sharePoint.completionPercentage || 0
                           const canEdit =
                             sharePoint.createdBy?._id === currentUser?._id || currentUser?.roles?.includes("Admin")
@@ -701,6 +706,7 @@ export default function SharePointShow() {
                                 <span className={isExpired ? "text-red-600 font-medium" : "text-foreground"}>
                                   {sharePoint.deadline ? new Date(sharePoint.deadline).toLocaleDateString() : "N/A"}
                                 </span>
+                                {/* 🔧 FIX: Only show Expired badge for non-completed documents */}
                                 {isExpired && (
                                   <Badge variant="destructive" className="ml-2 text-xs">
                                     Expired
