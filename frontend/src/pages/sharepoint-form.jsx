@@ -15,7 +15,25 @@ import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Users, FileText, LinkIcon, AlertCircle, CheckCircle2, Send, X, ArrowLeft, Clock, Target, MessageSquare, Check, Loader2, Shield, Search, Building2 } from 'lucide-react'
+import {
+  Calendar,
+  Users,
+  FileText,
+  LinkIcon,
+  AlertCircle,
+  CheckCircle2,
+  Send,
+  X,
+  ArrowLeft,
+  Clock,
+  Target,
+  MessageSquare,
+  Check,
+  Loader2,
+  Shield,
+  Search,
+  Building2,
+} from "lucide-react"
 import { createSharePoint } from "../apis/sharePointApi"
 import { getAllUsers } from "../apis/admin"
 import { toast } from "@/hooks/use-toast"
@@ -39,6 +57,27 @@ const DEPARTMENT_OPTIONS = [
   "Health & Safety",
   "Informatic Systems",
 ]
+
+// 🔧 FIX: Helper functions for timezone handling
+const formatDateTimeLocal = (date) => {
+  if (!date) return ""
+  const d = new Date(date)
+  // Format as YYYY-MM-DDTHH:MM for datetime-local input
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  const hours = String(d.getHours()).padStart(2, "0")
+  const minutes = String(d.getMinutes()).padStart(2, "0")
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+const parseLocalDateTime = (dateTimeString) => {
+  if (!dateTimeString) return null
+  // Create a new Date object from the local datetime string
+  // This ensures the time is treated as local time, not UTC
+  const date = new Date(dateTimeString)
+  return date.toISOString() // Convert to ISO string for backend
+}
 
 // Animation variants
 const containerVariants = {
@@ -86,7 +125,7 @@ export default function SharePointCreateEnhanced() {
     link: "",
     comment: "",
     deadline: "",
-    requesterDepartment: "", // NEW FIELD
+    requesterDepartment: "",
   })
 
   const [errors, setErrors] = useState({})
@@ -112,7 +151,7 @@ export default function SharePointCreateEnhanced() {
       title: "Document Details",
       description: "Basic information about your document",
       icon: FileText,
-      fields: ["title", "link", "requesterDepartment"], // Added requesterDepartment
+      fields: ["title", "link", "requesterDepartment"],
     },
     {
       id: 1,
@@ -146,13 +185,13 @@ export default function SharePointCreateEnhanced() {
 
   // Calculate form completion progress
   useEffect(() => {
-    const totalFields = 6 // title, link, deadline, requesterDepartment, managers, usersToSign
+    const totalFields = 6
     let completedFields = 0
 
     if (formData.title.trim()) completedFields++
     if (formData.link.trim()) completedFields++
     if (formData.deadline) completedFields++
-    if (formData.requesterDepartment) completedFields++ // NEW FIELD
+    if (formData.requesterDepartment) completedFields++
     if (selectedManager) completedFields++
     if (selectedUsers.length > 0) completedFields++
 
@@ -204,7 +243,6 @@ export default function SharePointCreateEnhanced() {
       const response = await getAllUsers(1, 1000)
       const users = response.users || []
 
-      // Filter managers (users with manager roles)
       const managerRoles = ["Admin", "Manager", "Project Manager", "Business Manager", "Department Manager"]
       const managerUsers = users.filter((user) => {
         return user.roles && user.roles.some((role) => managerRoles.includes(role))
@@ -243,7 +281,6 @@ export default function SharePointCreateEnhanced() {
       }
     }
 
-    // NEW VALIDATION: Requester Department
     if (step.fields.includes("requesterDepartment")) {
       if (!formData.requesterDepartment) {
         newErrors.requesterDepartment = "Requester department is required"
@@ -253,8 +290,13 @@ export default function SharePointCreateEnhanced() {
     if (step.fields.includes("deadline")) {
       if (!formData.deadline) {
         newErrors.deadline = "Deadline is required"
-      } else if (new Date(formData.deadline) <= new Date()) {
-        newErrors.deadline = "Deadline must be in the future"
+      } else {
+        // 🔧 FIX: Proper timezone validation
+        const selectedDate = new Date(formData.deadline)
+        const now = new Date()
+        if (selectedDate <= now) {
+          newErrors.deadline = "Deadline must be in the future"
+        }
       }
     }
 
@@ -281,7 +323,7 @@ export default function SharePointCreateEnhanced() {
   }
 
   const handleInputChange = (field, value) => {
-    console.log(`Setting ${field} to:`, value) // Debug log
+    console.log(`Setting ${field} to:`, value)
     setFormData((prev) => ({ ...prev, [field]: value }))
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }))
@@ -331,18 +373,20 @@ export default function SharePointCreateEnhanced() {
     setApiError("")
 
     try {
+      // 🔧 FIX: Proper timezone handling for deadline
       const submitData = {
         title: formData.title.trim(),
         link: formData.link.trim(),
         comment: formData.comment.trim(),
-        deadline: formData.deadline,
-        requesterDepartment: formData.requesterDepartment, // Ensure this is included
+        deadline: parseLocalDateTime(formData.deadline), // Convert to proper ISO string
+        requesterDepartment: formData.requesterDepartment,
         usersToSign: selectedUsers.map((user) => user._id),
         managersToApprove: [selectedManager._id],
       }
 
-      console.log("Submitting data:", submitData) // Debug log
-      console.log("Requester Department:", formData.requesterDepartment) // Debug log
+      console.log("Submitting data:", submitData)
+      console.log("Original deadline input:", formData.deadline)
+      console.log("Converted deadline:", submitData.deadline)
 
       await createSharePoint(submitData)
 
@@ -371,13 +415,12 @@ export default function SharePointCreateEnhanced() {
   }
 
   const handleCancel = () => {
-    // Clear all form data and state
     setFormData({
       title: "",
       link: "",
       comment: "",
       deadline: "",
-      requesterDepartment: "", // NEW FIELD
+      requesterDepartment: "",
     })
     setSelectedUsers([])
     setSelectedManager(null)
@@ -386,7 +429,6 @@ export default function SharePointCreateEnhanced() {
     setApiError("")
     setSubmitSuccess(false)
 
-    // Navigate back to SharePoint list
     navigate("/sharepoint")
   }
 
@@ -755,7 +797,6 @@ export default function SharePointCreateEnhanced() {
                             </p>
                           </div>
 
-                          {/* NEW FIELD: Requester Department */}
                           <div className="space-y-2">
                             <Label htmlFor="requesterDepartment" className="text-sm font-medium">
                               Requester Department *
@@ -828,7 +869,7 @@ export default function SharePointCreateEnhanced() {
                                   "pl-10 transition-all duration-200",
                                   errors.deadline && "border-destructive focus:border-destructive",
                                 )}
-                                min={new Date().toISOString().slice(0, 16)}
+                                min={formatDateTimeLocal(new Date())} // 🔧 FIX: Use proper formatting for min value
                               />
                             </div>
                             {errors.deadline && (
@@ -838,7 +879,10 @@ export default function SharePointCreateEnhanced() {
                               </p>
                             )}
                             <p className="text-xs text-muted-foreground">
-                              Select both the date and time for when this document approval should be completed
+                              Select both the date and time for when this document approval should be completed.
+                              {/* 🔧 FIX: Add timezone info */}
+                              Time will be saved in your local timezone (
+                              {Intl.DateTimeFormat().resolvedOptions().timeZone}).
                             </p>
                           </div>
 
@@ -1051,6 +1095,7 @@ export default function SharePointCreateEnhanced() {
                                 <div>
                                   <Label className="text-sm font-medium text-muted-foreground">Deadline</Label>
                                   <p className="text-sm">
+                                    {/* 🔧 FIX: Show the deadline in local time format */}
                                     {formData.deadline ? new Date(formData.deadline).toLocaleString() : "Not set"}
                                   </p>
                                 </div>

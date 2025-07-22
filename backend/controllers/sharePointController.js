@@ -6,7 +6,7 @@ const {
   sendRelaunchNotificationEmail,
   sendCompletionNotificationEmail,
   sendBulkEmails,
-  sendExpirationNotificationEmail, // NEW: Add expiration notification
+  sendExpirationNotificationEmail,
 } = require("../utils/emailService")
 
 // Helper function to calculate completion percentage and status
@@ -44,16 +44,13 @@ const calculateCompletionData = (sharePoint) => {
   } else if (!sharePoint.managerApproved && sharePoint.status === "pending_approval") {
     status = "pending_approval"
   } else if (allUsersSigned && sharePoint.managerApproved) {
-    // 🔧 FIX: When document is fully completed, it stays "completed" regardless of deadline
     status = "completed"
   } else if (signedCount > 0 && sharePoint.managerApproved) {
-    // 🔧 FIX: Check if expired only for in-progress documents (not completed)
     status = isExpired ? "expired" : "in_progress"
   } else if (sharePoint.managerApproved) {
-    // 🔧 FIX: Check if expired only for pending documents (not completed)
     status = isExpired ? "expired" : "pending"
   } else {
-    status = isExpired ? "expired" : "pending_approval" // 🔧 NEW: Even pending approval can be expired
+    status = isExpired ? "expired" : "pending_approval"
   }
 
   return {
@@ -64,83 +61,261 @@ const calculateCompletionData = (sharePoint) => {
     signedCount,
     totalSigners,
     managerApproved: sharePoint.managerApproved,
-    isExpired, // 🔧 NEW: Add isExpired flag
+    isExpired,
   }
 }
 
-// 🔧 NEW: Function to check and notify about expired documents
+// 🔧 ENHANCED: Function to check and notify about expired documents with better error handling
 const checkAndNotifyExpiredDocuments = async () => {
   try {
+    console.log("🔍 Starting expiration check at:", new Date().toISOString())
+
     const now = new Date()
-    const expiredDocuments = await SharePoint.find({
+
+    // 🔧 FIX: More comprehensive query to find expired documents
+    const query = {
       deadline: { $lt: now },
-      status: { $nin: ["completed", "expired", "rejected", "disapproved"] },
-      expiredNotificationSent: { $ne: true },
-    }).populate("createdBy", "username email")
+      status: { $nin: ["completed", "expired", "rejected", "disapproved", "cancelled"] },
+      $or: [
+        { expiredNotificationSent: { $exists: false } },
+        { expiredNotificationSent: false },
+        { expiredNotificationSent: null },
+      ],
+    }
+
+    console.log("📋 Expiration query:", JSON.stringify(query, null, 2))
+
+    const expiredDocuments = await SharePoint.find(query).populate("createdBy", "username email").lean()
+
+    console.log(`📊 Found ${expiredDocuments.length} expired documents to process`)
+
+    if (expiredDocuments.length === 0) {
+      console.log("✅ No expired documents found")
+      return { processed: 0, successful: 0, failed: 0 }
+    }
+
+    let successful = 0
+    let failed = 0
 
     for (const doc of expiredDocuments) {
       try {
+        console.log(`📧 Processing expiration for document: ${doc.title} (${doc._id})`)
+        console.log(`📅 Document deadline: ${doc.deadline}, Current time: ${now}`)
+        console.log(`👤 Creator: ${doc.createdBy?.username} (${doc.createdBy?.email})`)
+
+        // Validate creator email
+        if (!doc.createdBy?.email) {
+          console.error(`❌ No email found for creator of document ${doc._id}`)
+          failed++
+          continue
+        }
+
         // Send expiration notification to creator
         await sendExpirationNotificationEmail({
           to: doc.createdBy.email,
-          username: doc.createdBy.username,
+          username: doc.createdBy.username || "User",
           documentTitle: doc.title,
           documentId: doc._id.toString(),
           deadline: doc.deadline,
         })
 
-        // Mark as expired and notification sent
-        doc.status = "expired"
-        doc.expiredNotificationSent = true
-        doc.updateHistory.push({
-          action: "expired",
-          performedBy: null, // System action
-          details: `Document automatically marked as expired. Creator notified to relaunch with new deadline.`,
-          comment: null,
-          userAction: {
-            type: "system_expiration",
-            timestamp: new Date(),
-            note: "Document expired - creator notification sent",
+        // 🔧 FIX: Update document status and notification flag using findByIdAndUpdate
+        await SharePoint.findByIdAndUpdate(doc._id, {
+          $set: {
+            status: "expired",
+            expiredNotificationSent: true,
+            expiredNotificationSentAt: new Date(), // 🔧 NEW: Track when notification was sent
+          },
+          $push: {
+            updateHistory: {
+              action: "expired",
+              performedBy: null,
+              details: `Document automatically marked as expired. Creator notified to relaunch with new deadline.`,
+              comment: null,
+              userAction: {
+                type: "system_expiration",
+                timestamp: new Date(),
+                note: "Document expired - creator notification sent",
+              },
+            },
           },
         })
 
-        await doc.save()
-        console.log(`📧 Expiration notification sent for document: ${doc.title} (${doc._id})`)
+        console.log(`✅ Expiration notification sent successfully for document: ${doc.title} (${doc._id})`)
+        successful++
       } catch (emailError) {
-        console.error(`❌ Failed to send expiration notification for ${doc._id}:`, emailError)
+        console.error(`❌ Failed to process expiration for document ${doc._id}:`, emailError)
+
+        // 🔧 NEW: Mark as failed attempt but don't prevent future attempts
+        try {
+          await SharePoint.findByIdAndUpdate(doc._id, {
+            $push: {
+              updateHistory: {
+                action: "expiration_failed",
+                performedBy: null,
+                details: `Failed to send expiration notification: ${emailError.message}`,
+                comment: null,
+                userAction: {
+                  type: "system_expiration_failed",
+                  timestamp: new Date(),
+                  note: `Email failed: ${emailError.message}`,
+                },
+              },
+            },
+          })
+        } catch (updateError) {
+          console.error(`❌ Failed to update document history for ${doc._id}:`, updateError)
+        }
+
+        failed++
       }
     }
 
-    if (expiredDocuments.length > 0) {
-      console.log(`✅ Processed ${expiredDocuments.length} expired documents`)
+    const result = {
+      processed: expiredDocuments.length,
+      successful,
+      failed,
+      timestamp: new Date().toISOString(),
     }
+
+    console.log(`✅ Expiration check completed:`, result)
+    return result
   } catch (error) {
-    console.error("❌ Error checking expired documents:", error)
+    console.error("❌ Error in expiration check process:", error)
+    return { processed: 0, successful: 0, failed: 0, error: error.message }
   }
 }
 
-// 🔧 NEW: Run expiration check every hour
-setInterval(checkAndNotifyExpiredDocuments, 60 * 60 * 1000) // 1 hour
+// 🔧 ENHANCED: Store interval reference and add startup delay
+let expirationCheckInterval = null
+
+// 🔧 NEW: Start expiration checking with initial delay
+const startExpirationChecking = () => {
+  // Clear any existing interval
+  if (expirationCheckInterval) {
+    clearInterval(expirationCheckInterval)
+  }
+
+  console.log("🚀 Starting expiration checking system...")
+
+  // Run initial check after 30 seconds (to allow server to fully start)
+  setTimeout(() => {
+    console.log("🔍 Running initial expiration check...")
+    checkAndNotifyExpiredDocuments()
+  }, 30000)
+
+  // Then run every hour
+  expirationCheckInterval = setInterval(
+    () => {
+      console.log("⏰ Running scheduled expiration check...")
+      checkAndNotifyExpiredDocuments()
+    },
+    60 * 60 * 1000,
+  ) // 1 hour
+
+  console.log("✅ Expiration checking system started (checks every hour)")
+}
+
+// 🔧 NEW: Stop expiration checking (useful for testing or shutdown)
+const stopExpirationChecking = () => {
+  if (expirationCheckInterval) {
+    clearInterval(expirationCheckInterval)
+    expirationCheckInterval = null
+    console.log("🛑 Expiration checking system stopped")
+  }
+}
+
+// Start the expiration checking system
+startExpirationChecking()
+
+// 🔧 NEW: Manual expiration check endpoint for testing
+exports.manualExpirationCheck = async (req, res) => {
+  try {
+    console.log("🔧 Manual expiration check triggered by:", req.user?.username || "Unknown user")
+    const result = await checkAndNotifyExpiredDocuments()
+
+    res.json({
+      message: "Manual expiration check completed",
+      result,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error("❌ Manual expiration check failed:", error)
+    res.status(500).json({
+      error: "Manual expiration check failed",
+      details: error.message,
+      timestamp: new Date().toISOString(),
+    })
+  }
+}
+
+// 🔧 NEW: Get expiration check status
+exports.getExpirationCheckStatus = async (req, res) => {
+  try {
+    const now = new Date()
+
+    // Get count of documents that should be expired
+    const expiredCount = await SharePoint.countDocuments({
+      deadline: { $lt: now },
+      status: { $nin: ["completed", "expired", "rejected", "disapproved", "cancelled"] },
+    })
+
+    // Get count of documents with pending notifications
+    const pendingNotifications = await SharePoint.countDocuments({
+      deadline: { $lt: now },
+      status: { $nin: ["completed", "expired", "rejected", "disapproved", "cancelled"] },
+      $or: [
+        { expiredNotificationSent: { $exists: false } },
+        { expiredNotificationSent: false },
+        { expiredNotificationSent: null },
+      ],
+    })
+
+    // Get recently processed documents
+    const recentlyProcessed = await SharePoint.find({
+      expiredNotificationSentAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24 hours
+    })
+      .select("title expiredNotificationSentAt createdBy")
+      .populate("createdBy", "username email")
+      .limit(10)
+
+    res.json({
+      status: "active",
+      intervalActive: !!expirationCheckInterval,
+      expiredDocumentsCount: expiredCount,
+      pendingNotificationsCount: pendingNotifications,
+      recentlyProcessed: recentlyProcessed.length,
+      recentlyProcessedDocuments: recentlyProcessed,
+      lastCheckTime: new Date().toISOString(),
+      nextCheckIn: "1 hour (automatic)",
+    })
+  } catch (error) {
+    console.error("❌ Error getting expiration check status:", error)
+    res.status(500).json({
+      error: "Failed to get expiration check status",
+      details: error.message,
+    })
+  }
+}
 
 // Create a new SharePoint - Email to assigned managers
 exports.createSharePoint = async (req, res) => {
   try {
-    console.log("Received request body:", req.body) // Debug log
+    console.log("Received request body:", req.body)
 
     const { title, link, comment, deadline, usersToSign, managersToApprove, requesterDepartment } = req.body
 
-    console.log("Extracted requesterDepartment:", requesterDepartment) // Debug log
+    console.log("Extracted requesterDepartment:", requesterDepartment)
 
     if (!title || !link || !deadline) {
       return res.status(400).json({ error: "Title, link, and deadline are required" })
     }
 
     if (!requesterDepartment || requesterDepartment.trim() === "") {
-      console.log("RequesterDepartment validation failed:", requesterDepartment) // Debug log
+      console.log("RequesterDepartment validation failed:", requesterDepartment)
       return res.status(400).json({ error: "Requester department is required" })
     }
 
-    // Validate that the department is one of the allowed values
     const allowedDepartments = [
       "Direction",
       "Engineering",
@@ -158,7 +333,7 @@ exports.createSharePoint = async (req, res) => {
     ]
 
     if (!allowedDepartments.includes(requesterDepartment)) {
-      console.log("Invalid department:", requesterDepartment) // Debug log
+      console.log("Invalid department:", requesterDepartment)
       return res.status(400).json({ error: "Invalid requester department selected" })
     }
 
@@ -184,19 +359,20 @@ exports.createSharePoint = async (req, res) => {
       return res.status(400).json({ error: "One or more selected managers do not exist" })
     }
 
-    console.log("Creating SharePoint with department:", requesterDepartment) // Debug log
+    console.log("Creating SharePoint with department:", requesterDepartment)
 
     const sharePoint = new SharePoint({
       title,
       link,
       comment,
       deadline: new Date(deadline),
-      requesterDepartment: requesterDepartment.trim(), // Ensure no extra whitespace
+      requesterDepartment: requesterDepartment.trim(),
       createdBy: req.user._id,
       usersToSign: selectedUsers.map((user) => ({ user: user._id })),
       managersToApprove: managersToApprove,
       status: "pending_approval",
-      expiredNotificationSent: false, // 🔧 NEW: Track expiration notifications
+      expiredNotificationSent: false,
+      expiredNotificationSentAt: null, // 🔧 NEW: Track when notification was sent
       updateHistory: [
         {
           action: "created",
@@ -215,7 +391,7 @@ exports.createSharePoint = async (req, res) => {
     })
 
     await sharePoint.save()
-    console.log("SharePoint saved successfully with department:", sharePoint.requesterDepartment) // Debug log
+    console.log("SharePoint saved successfully with department:", sharePoint.requesterDepartment)
 
     await sharePoint.populate([
       { path: "createdBy", select: "username email roles" },
@@ -223,7 +399,6 @@ exports.createSharePoint = async (req, res) => {
       { path: "managersToApprove", select: "username email roles" },
     ])
 
-    // 🔧 FIX: Ensure we use the correct MongoDB _id as string
     const documentId = sharePoint._id.toString()
     console.log(`📋 Created SharePoint with ID: ${documentId}`)
 
@@ -261,7 +436,6 @@ exports.createSharePoint = async (req, res) => {
   } catch (error) {
     console.error("Error creating SharePoint:", error)
     if (error.name === "ValidationError") {
-      // Handle Mongoose validation errors
       const validationErrors = Object.values(error.errors).map((err) => err.message)
       return res.status(400).json({ error: `Validation failed: ${validationErrors.join(", ")}` })
     }
@@ -269,7 +443,7 @@ exports.createSharePoint = async (req, res) => {
   }
 }
 
-// Manager approves document - Email to assigned users
+// Keep all other existing functions unchanged...
 exports.approveSharePoint = async (req, res) => {
   try {
     const { approved, approvalNote } = req.body
@@ -282,7 +456,6 @@ exports.approveSharePoint = async (req, res) => {
       return res.status(404).json({ error: "SharePoint not found" })
     }
 
-    // 🔧 NEW: Check if document is expired
     const isExpired = sharePoint.deadline && new Date(sharePoint.deadline) < new Date()
     if (isExpired && sharePoint.status !== "completed") {
       return res.status(400).json({
@@ -291,7 +464,6 @@ exports.approveSharePoint = async (req, res) => {
       })
     }
 
-    // 🔧 FIX: Ensure we use the correct MongoDB _id as string
     const documentId = sharePoint._id.toString()
     console.log(`📋 Processing approval for SharePoint ID: ${documentId}`)
 
@@ -336,7 +508,6 @@ exports.approveSharePoint = async (req, res) => {
     await sharePoint.save()
 
     if (approved) {
-      // Send email to assigned users for signing (only to users who haven't signed yet)
       try {
         const usersToNotify = sharePoint.usersToSign.filter((signer) => !signer.hasSigned)
 
@@ -350,7 +521,7 @@ exports.approveSharePoint = async (req, res) => {
             createdBy: sharePoint.createdBy.username,
             approvedBy: req.user.username,
             comment: sharePoint.comment || "",
-            documentId: documentId, // 🔧 FIX: Use the correct document ID
+            documentId: documentId,
           }),
         )
 
@@ -363,7 +534,6 @@ exports.approveSharePoint = async (req, res) => {
           `📧 User signing notifications sent with document ID ${documentId}: ${successful} successful, ${failed} failed`,
         )
 
-        // Log any failures
         emailResults.forEach((result, index) => {
           if (result.status === "rejected") {
             console.error(`❌ Failed to send email to ${usersToNotify[index].user.email}:`, result.reason)
@@ -373,13 +543,12 @@ exports.approveSharePoint = async (req, res) => {
         console.error("❌ Failed to send user signing notifications:", emailError)
       }
     } else {
-      // Send relaunch notification to creator
       try {
         await sendRelaunchNotificationEmail({
           to: sharePoint.createdBy.email,
           username: sharePoint.createdBy.username,
           documentTitle: sharePoint.title,
-          documentId: documentId, // 🔧 FIX: Use the correct document ID
+          documentId: documentId,
           disapprovedBy: req.user.username,
           disapprovalNote: approvalNote.trim(),
           isManagerDisapproval: true,
@@ -412,7 +581,7 @@ exports.approveSharePoint = async (req, res) => {
   }
 }
 
-// User signs document - Check if all signed, then email creator completion
+// Keep all other existing functions...
 exports.signSharePoint = async (req, res) => {
   try {
     const { signatureNote } = req.body
@@ -424,7 +593,6 @@ exports.signSharePoint = async (req, res) => {
       return res.status(404).json({ error: "SharePoint not found" })
     }
 
-    // 🔧 NEW: Check if document is expired
     const isExpired = sharePoint.deadline && new Date(sharePoint.deadline) < new Date()
     if (isExpired && sharePoint.status !== "completed") {
       return res.status(400).json({
@@ -433,7 +601,6 @@ exports.signSharePoint = async (req, res) => {
       })
     }
 
-    // 🔧 FIX: Ensure we use the correct MongoDB _id as string
     const documentId = sharePoint._id.toString()
     console.log(`📋 Processing signature for SharePoint ID: ${documentId}`)
 
@@ -481,14 +648,13 @@ exports.signSharePoint = async (req, res) => {
 
     await sharePoint.save()
 
-    // If all users have signed, send completion notification to creator
     if (completionData.status === "completed") {
       try {
         await sendCompletionNotificationEmail({
           to: sharePoint.createdBy.email,
           username: sharePoint.createdBy.username,
           documentTitle: sharePoint.title,
-          documentId: documentId, // 🔧 FIX: Use the correct document ID
+          documentId: documentId,
         })
         console.log(`📧 Completion notification sent to creator with document ID: ${documentId}`)
       } catch (emailError) {
@@ -516,7 +682,6 @@ exports.signSharePoint = async (req, res) => {
   }
 }
 
-// User disapproves document - Email creator for relaunch
 exports.disapproveSharePoint = async (req, res) => {
   try {
     const { disapprovalNote } = req.body
@@ -528,7 +693,6 @@ exports.disapproveSharePoint = async (req, res) => {
       return res.status(404).json({ error: "SharePoint not found" })
     }
 
-    // 🔧 NEW: Check if document is expired
     const isExpired = sharePoint.deadline && new Date(sharePoint.deadline) < new Date()
     if (isExpired && sharePoint.status !== "completed") {
       return res.status(400).json({
@@ -537,7 +701,6 @@ exports.disapproveSharePoint = async (req, res) => {
       })
     }
 
-    // 🔧 FIX: Ensure we use the correct MongoDB _id as string
     const documentId = sharePoint._id.toString()
     console.log(`📋 Processing disapproval for SharePoint ID: ${documentId}`)
 
@@ -591,13 +754,12 @@ exports.disapproveSharePoint = async (req, res) => {
 
     await sharePoint.save()
 
-    // Send relaunch notification to creator
     try {
       await sendRelaunchNotificationEmail({
         to: sharePoint.createdBy.email,
         username: sharePoint.createdBy.username,
         documentTitle: sharePoint.title,
-        documentId: documentId, // 🔧 FIX: Use the correct document ID
+        documentId: documentId,
         disapprovedBy: req.user.username,
         disapprovalNote: disapprovalNote.trim(),
         isManagerDisapproval: false,
@@ -628,10 +790,9 @@ exports.disapproveSharePoint = async (req, res) => {
   }
 }
 
-// Creator relaunches document - Email to assigned managers again (PRESERVE USER APPROVALS)
 exports.relaunchSharePoint = async (req, res) => {
   try {
-    const { relaunchComment, newDeadline } = req.body // 🔧 NEW: Accept new deadline
+    const { relaunchComment, newDeadline } = req.body
     const sharePoint = await SharePoint.findById(req.params.id)
       .populate("createdBy", "username email roles")
       .populate("managersToApprove", "username email roles")
@@ -641,7 +802,6 @@ exports.relaunchSharePoint = async (req, res) => {
       return res.status(404).json({ error: "SharePoint not found" })
     }
 
-    // 🔧 FIX: Ensure we use the correct MongoDB _id as string
     const documentId = sharePoint._id.toString()
     console.log(`📋 Processing relaunch for SharePoint ID: ${documentId}`)
 
@@ -656,7 +816,6 @@ exports.relaunchSharePoint = async (req, res) => {
       })
     }
 
-    // 🔧 NEW: Validate new deadline if provided
     if (newDeadline) {
       const newDeadlineDate = new Date(newDeadline)
       if (newDeadlineDate <= new Date()) {
@@ -664,29 +823,25 @@ exports.relaunchSharePoint = async (req, res) => {
       }
       sharePoint.deadline = newDeadlineDate
     } else if (sharePoint.status === "expired") {
-      // 🔧 NEW: For expired documents, new deadline is required
       return res.status(400).json({ error: "New deadline is required when relaunching expired documents" })
     }
 
-    // Reset document state but PRESERVE existing user approvals
     sharePoint.status = "pending_approval"
     sharePoint.managerApproved = false
     sharePoint.approvedBy = null
     sharePoint.approvedAt = null
     sharePoint.disapprovalNote = null
-    sharePoint.expiredNotificationSent = false // 🔧 NEW: Reset expiration notification flag
+    sharePoint.expiredNotificationSent = false
+    sharePoint.expiredNotificationSentAt = null // 🔧 NEW: Reset notification timestamp
 
-    // PRESERVE user signatures but ONLY reset disapprovals
     const resetSigners = sharePoint.usersToSign.map((signer) => ({
       ...signer.toObject(),
-      // Keep existing approvals (hasSigned, signedAt, signatureNote)
-      hasSigned: signer.hasSigned, // PRESERVE
-      signedAt: signer.signedAt, // PRESERVE
-      signatureNote: signer.signatureNote, // PRESERVE
-      // Only reset disapprovals
-      hasDisapproved: false, // RESET
-      disapprovedAt: null, // RESET
-      disapprovalNote: null, // RESET
+      hasSigned: signer.hasSigned,
+      signedAt: signer.signedAt,
+      signatureNote: signer.signatureNote,
+      hasDisapproved: false,
+      disapprovedAt: null,
+      disapprovalNote: null,
     }))
     sharePoint.usersToSign = resetSigners
 
@@ -695,7 +850,6 @@ exports.relaunchSharePoint = async (req, res) => {
         ? relaunchComment.trim()
         : "Document relaunched to address previous concerns"
 
-    // 🔧 NEW: Include deadline change information
     const deadlineChangeInfo = newDeadline ? ` New deadline set to: ${new Date(newDeadline).toLocaleDateString()}.` : ""
 
     sharePoint.updateHistory.push({
@@ -709,24 +863,23 @@ exports.relaunchSharePoint = async (req, res) => {
         username: req.user.username,
         timestamp: new Date(),
         note: relaunchCommentText,
-        newDeadline: newDeadline || null, // 🔧 NEW: Track deadline changes
+        newDeadline: newDeadline || null,
       },
     })
 
     await sharePoint.save()
 
-    // Send email to assigned managers for re-approval
     try {
       const managerEmailList = sharePoint.managersToApprove.map((manager) => ({
         to: manager.email,
         username: manager.username,
         documentTitle: sharePoint.title,
         documentLink: sharePoint.link,
-        deadline: sharePoint.deadline, // 🔧 NEW: Use updated deadline
+        deadline: sharePoint.deadline,
         createdBy: req.user.username,
         comment: sharePoint.comment || "",
-        documentId: documentId, // 🔧 FIX: Use the correct document ID
-        isRelaunch: true, // 🔧 NEW: Flag as relaunch
+        documentId: documentId,
+        isRelaunch: true,
         relaunchReason: relaunchCommentText,
       }))
 
@@ -747,7 +900,6 @@ exports.relaunchSharePoint = async (req, res) => {
       ...completionData,
     }
 
-    // Count how many users already approved
     const alreadyApprovedCount = sharePoint.usersToSign.filter((signer) => signer.hasSigned).length
     const totalUsers = sharePoint.usersToSign.length
 
@@ -756,7 +908,7 @@ exports.relaunchSharePoint = async (req, res) => {
       sharePoint: responseData,
       preservedApprovals: alreadyApprovedCount,
       totalUsers: totalUsers,
-      newDeadline: newDeadline || null, // 🔧 NEW: Return new deadline info
+      newDeadline: newDeadline || null,
     })
   } catch (error) {
     console.error("Error relaunching SharePoint:", error)
@@ -764,7 +916,6 @@ exports.relaunchSharePoint = async (req, res) => {
   }
 }
 
-// Keep all other existing functions unchanged...
 exports.getAllSharePoints = async (req, res) => {
   try {
     const {
@@ -776,8 +927,8 @@ exports.getAllSharePoints = async (req, res) => {
       sortBy = "createdAt",
       sortOrder = "desc",
       search = "",
-      approxiDate,        // 🔧 NEW
-      requesterDepartment // 🔧 NEW
+      approxiDate,
+      requesterDepartment,
     } = req.query
 
     const filter = {}
@@ -786,27 +937,27 @@ exports.getAllSharePoints = async (req, res) => {
     if (status && status !== "all") filter.status = status
     if (createdBy) filter.createdBy = createdBy
     if (assignedTo) filter["usersToSign.user"] = assignedTo
-    if (approxiDate && approxiDate !== "all") filter.approxiDate = approxiDate           // 🔧 NEW
-    if (requesterDepartment && requesterDepartment !== "all") filter.requesterDepartment = requesterDepartment // 🔧 NEW
+    if (approxiDate && approxiDate !== "all") filter.approxiDate = approxiDate
+    if (requesterDepartment && requesterDepartment !== "all") filter.requesterDepartment = requesterDepartment
 
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: "i" } },
         { comment: { $regex: search, $options: "i" } },
-        { "createdBy.username": { $regex: search, $options: "i" } } // 🔧 NEW: Search by creator
+        { "createdBy.username": { $regex: search, $options: "i" } },
       ]
     }
 
     sort[sortBy] = sortOrder === "desc" ? -1 : 1
 
-    const skip = (parseInt(page) - 1) * parseInt(limit)
+    const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit)
     const sharePoints = await SharePoint.find(filter)
       .populate("createdBy", "username email roles")
       .populate("usersToSign.user", "username email roles")
       .populate("approvedBy", "username email")
       .sort(sort)
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(Number.parseInt(limit))
       .lean()
 
     const sharePointsWithCompletion = sharePoints.map((sharePoint) => {
@@ -1000,8 +1151,8 @@ exports.updateSharePoint = async (req, res) => {
         return res.status(400).json({ error: "Deadline must be in the future" })
       }
       updateData.deadline = new Date(deadline)
-      // 🔧 NEW: Reset expiration notification if deadline is updated
       updateData.expiredNotificationSent = false
+      updateData.expiredNotificationSentAt = null // 🔧 NEW: Reset notification timestamp
     }
     if (usersToSign && Array.isArray(usersToSign)) {
       const selectedUsers = await User.find({ _id: { $in: usersToSign } })
@@ -1064,7 +1215,6 @@ exports.canUserSign = async (req, res) => {
     const userId = req.params.userId || req.user._id
     const isAssignedSigner = sharePoint.usersToSign.some((signer) => signer.user.toString() === userId.toString())
 
-    // 🔧 NEW: Check if document is expired
     const isExpired = sharePoint.deadline && new Date(sharePoint.deadline) < new Date()
 
     const canSign = sharePoint.managerApproved && isAssignedSigner && !isExpired
@@ -1073,7 +1223,7 @@ exports.canUserSign = async (req, res) => {
       canSign,
       managerApproved: sharePoint.managerApproved,
       isAssignedSigner,
-      isExpired, // 🔧 NEW: Include expiration status
+      isExpired,
       reason: !sharePoint.managerApproved
         ? "Manager approval required before signing"
         : !isAssignedSigner
@@ -1161,5 +1311,7 @@ exports.deleteSharePoint = async (req, res) => {
   }
 }
 
-// 🔧 NEW: Export the expiration check function for manual triggering
+// Export the expiration check function and control functions
 exports.checkExpiredDocuments = checkAndNotifyExpiredDocuments
+exports.startExpirationChecking = startExpirationChecking
+exports.stopExpirationChecking = stopExpirationChecking
