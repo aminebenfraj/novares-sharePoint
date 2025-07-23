@@ -9,7 +9,6 @@ import {
   Trash2,
   Edit,
   MoreHorizontal,
-  Filter,
   RefreshCw,
   CheckCircle,
   AlertTriangle,
@@ -18,6 +17,7 @@ import {
   Eye,
   EyeOff,
   Info,
+  X,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -61,10 +61,13 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 // Import API functions
-import { getAllUsers, createUser, deleteUser } from "../../apis/admin"
+import { getAllUsers, getAdminUsers, createUser, deleteUser, getUserStats } from "../../apis/admin"
 import { getRecentUsers } from "../../apis/userApi"
 
-// Add the import at the top with the other imports
+// Import the debounce hook
+import { useDebounce } from "../../components/use-debounce"
+
+// Import MainLayout
 import MainLayout from "../../components/MainLayout"
 
 // Animation variants
@@ -101,56 +104,89 @@ const staggerContainer = {
   },
 }
 
-// Role categories for organization based on the backend roles
+// Updated role categories
 const roleCategories = {
-  Management: ["Admin", "Manager", "Project Manager", "Business Manager", "Operations director"],
-  Engineering: [
+  Management: [
+    "Admin",
+    "Manager",
+    "Project Manager",
+    "Operations director",
     "Plant manager",
     "Engineering Manager",
+    "Business Manager",
     "Production Manager",
     "Controlling Manager",
     "Financial Manager",
     "Purchasing Manager",
-    "Quality Manager",
-  ],
-  Logistics: [
     "Logistic Manager",
+    "Quality Manager",
     "Human Resources Manager",
     "Maintenance Manager",
+  ],
+  Logistics: [
     "Direction Assistant",
     "Engineering Staff",
     "Business Staff",
     "Production Staff",
     "Controlling Staff",
     "Financial Staff",
-  ],
-  Production: ["Maintenance Staff", "Health & Safety Staff", "Informatic Systems Staff"],
-  Quality: [
-    "Quality Manager",
     "Purchasing Staff",
     "Logistics Staff",
     "Quality Staff",
     "Human Resources Staff",
+    "Maintenance Staff",
+    "Health & Safety Staff",
+    "Informatic Systems Staff",
   ],
-  Other: ["Customer", "User", "Maintenance Manager","Purchasing Manager"],
+  Other: ["Customer", "User"],
 }
 
 // All roles flattened
 const allRoles = Object.values(roleCategories).flat()
 
 export default function AdminDashboard() {
-  const [users, setUsers] = useState([])
+  // Separate state for all users and admin users
+  const [allUsers, setAllUsers] = useState([])
+  const [adminUsers, setAdminUsers] = useState([])
+
+  const [userStats, setUserStats] = useState({
+    totalUsers: 0,
+    adminUsers: 0,
+    managerUsers: 0,
+    customerUsers: 0,
+    recentlyAdded: 0,
+  })
+
   const [loading, setLoading] = useState(true)
+  const [adminLoading, setAdminLoading] = useState(false)
+  const [statsLoading, setStatsLoading] = useState(true)
   const [error, setError] = useState("")
-  const [searchTerm, setSearchTerm] = useState("")
+
+  // Separate search terms for each tab
+  const [allUsersSearchTerm, setAllUsersSearchTerm] = useState("")
+  const [adminUsersSearchTerm, setAdminUsersSearchTerm] = useState("")
+
   const [roleFilter, setRoleFilter] = useState("all")
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
+
+  // Separate pagination for each tab
+  const [allUsersCurrentPage, setAllUsersCurrentPage] = useState(1)
+  const [allUsersTotalPages, setAllUsersTotalPages] = useState(1)
+  const [allUsersTotalCount, setAllUsersTotalCount] = useState(0)
+
+  const [adminUsersCurrentPage, setAdminUsersCurrentPage] = useState(1)
+  const [adminUsersTotalPages, setAdminUsersTotalPages] = useState(1)
+  const [adminUsersTotalCount, setAdminUsersTotalCount] = useState(0)
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState("all-users")
   const [refreshing, setRefreshing] = useState(false)
   const [recentUsers, setRecentUsers] = useState([])
+  const [isSearching, setIsSearching] = useState(false)
+
+  // Use debounced search terms
+  const debouncedAllUsersSearchTerm = useDebounce(allUsersSearchTerm, 500)
+  const debouncedAdminUsersSearchTerm = useDebounce(adminUsersSearchTerm, 500)
 
   // Password validation states
   const [showPassword, setShowPassword] = useState(false)
@@ -228,25 +264,53 @@ export default function AdminDashboard() {
     return null
   }
 
-  // Fetch users when component mounts or page changes
+  // Fetch all users when component mounts, page changes, or search/filter changes
   useEffect(() => {
-    fetchUsers()
-  }, [currentPage])
+    if (activeTab === "all-users") {
+      fetchAllUsers()
+    }
+  }, [allUsersCurrentPage, debouncedAllUsersSearchTerm, roleFilter, activeTab])
 
-  // Fetch recent users for stats
+  // Fetch admin users when admin tab is active
   useEffect(() => {
+    if (activeTab === "admin-users") {
+      fetchAdminUsers()
+    }
+  }, [adminUsersCurrentPage, debouncedAdminUsersSearchTerm, activeTab])
+
+  // Reset to page 1 when search or filter changes for all users
+  useEffect(() => {
+    if (allUsersCurrentPage !== 1) {
+      setAllUsersCurrentPage(1)
+    }
+  }, [debouncedAllUsersSearchTerm, roleFilter])
+
+  // Reset to page 1 when search changes for admin users
+  useEffect(() => {
+    if (adminUsersCurrentPage !== 1) {
+      setAdminUsersCurrentPage(1)
+    }
+  }, [debouncedAdminUsersSearchTerm])
+
+  // Fetch user stats and recent users
+  useEffect(() => {
+    fetchUserStats()
     fetchRecentUsers()
   }, [])
 
-  const fetchUsers = async () => {
+  const fetchAllUsers = async () => {
     try {
       setLoading(true)
-      const response = await getAllUsers(currentPage, ITEMS_PER_PAGE)
-      setUsers(response.users)
-      setTotalPages(response.pagination.totalPages)
+      setIsSearching(debouncedAllUsersSearchTerm.length > 0)
+
+      const response = await getAllUsers(allUsersCurrentPage, ITEMS_PER_PAGE, debouncedAllUsersSearchTerm, roleFilter)
+
+      setAllUsers(response.users)
+      setAllUsersTotalPages(response.pagination.totalPages)
+      setAllUsersTotalCount(response.pagination.totalUsers)
       setError("")
     } catch (err) {
-      console.error("Error fetching users:", err)
+      console.error("Error fetching all users:", err)
       setError("Failed to load users. Please try again.")
       toast({
         variant: "destructive",
@@ -255,6 +319,57 @@ export default function AdminDashboard() {
       })
     } finally {
       setLoading(false)
+      setIsSearching(false)
+    }
+  }
+
+  const fetchAdminUsers = async () => {
+    try {
+      setAdminLoading(true)
+      setIsSearching(debouncedAdminUsersSearchTerm.length > 0)
+
+      const response = await getAdminUsers(adminUsersCurrentPage, ITEMS_PER_PAGE, debouncedAdminUsersSearchTerm)
+
+      setAdminUsers(response.users)
+      setAdminUsersTotalPages(response.pagination.totalPages)
+      setAdminUsersTotalCount(response.pagination.totalUsers)
+      setError("")
+    } catch (err) {
+      console.error("Error fetching admin users:", err)
+      setError("Failed to load admin users. Please try again.")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load admin users.",
+      })
+    } finally {
+      setAdminLoading(false)
+      setIsSearching(false)
+    }
+  }
+
+  const fetchUserStats = async () => {
+    try {
+      setStatsLoading(true)
+      const stats = await getUserStats()
+      setUserStats({
+        totalUsers: stats.totalUsers || 0,
+        adminUsers: stats.adminUsers || 0,
+        managerUsers: stats.managerUsers || 0,
+        customerUsers: stats.customerUsers || 0,
+        recentlyAdded: stats.recentlyAdded || 0,
+      })
+    } catch (err) {
+      console.error("Error fetching user stats:", err)
+      setUserStats({
+        totalUsers: 0,
+        adminUsers: 0,
+        managerUsers: 0,
+        customerUsers: 0,
+        recentlyAdded: 0,
+      })
+    } finally {
+      setStatsLoading(false)
     }
   }
 
@@ -270,8 +385,15 @@ export default function AdminDashboard() {
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      await fetchUsers()
-      await fetchRecentUsers()
+      const promises = [fetchUserStats(), fetchRecentUsers()]
+
+      if (activeTab === "all-users") {
+        promises.push(fetchAllUsers())
+      } else {
+        promises.push(fetchAdminUsers())
+      }
+
+      await Promise.all(promises)
 
       toast({
         title: "Success",
@@ -292,7 +414,6 @@ export default function AdminDashboard() {
     e.preventDefault()
     setIsSubmitting(true)
 
-    // Validate password
     const passwordError = validatePassword()
     if (passwordError) {
       toast({
@@ -307,8 +428,8 @@ export default function AdminDashboard() {
     try {
       await createUser(newUserData)
 
-      // Refresh the user list
-      await fetchUsers()
+      // Refresh both tabs and stats
+      await Promise.all([fetchAllUsers(), fetchAdminUsers(), fetchUserStats()])
 
       setIsCreateModalOpen(false)
       setNewUserData({
@@ -339,8 +460,8 @@ export default function AdminDashboard() {
     try {
       await deleteUser(license)
 
-      // Update the users list after deletion
-      setUsers(users.filter((user) => user.license !== license))
+      // Refresh both tabs and stats
+      await Promise.all([fetchAllUsers(), fetchAdminUsers(), fetchUserStats()])
 
       toast({
         title: "Success",
@@ -367,23 +488,29 @@ export default function AdminDashboard() {
     }))
   }
 
-  // Filter users based on search term and role
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      searchTerm === "" ||
-      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.license.toLowerCase().includes(searchTerm.toLowerCase())
+  const clearAllUsersSearch = () => {
+    setAllUsersSearchTerm("")
+    setRoleFilter("all")
+  }
 
-    const matchesRole = roleFilter === "all" || user.roles.includes(roleFilter)
+  const clearAdminUsersSearch = () => {
+    setAdminUsersSearchTerm("")
+  }
 
-    return matchesSearch && matchesRole
-  })
+  // Handle tab change
+  const handleTabChange = (value) => {
+    setActiveTab(value)
+    setError("") // Clear any errors when switching tabs
+  }
 
-  // Get active and inactive user counts
-  const activeUsers = users.length
-  const adminUsers = users.filter((user) => user.roles.includes("Admin")).length
-  const customerUsers = users.filter((user) => user.roles.includes("Customer")).length
+  // Get current search term based on active tab
+  const getCurrentSearchTerm = () => {
+    return activeTab === "all-users" ? allUsersSearchTerm : adminUsersSearchTerm
+  }
+
+  const getCurrentDebouncedSearchTerm = () => {
+    return activeTab === "all-users" ? debouncedAllUsersSearchTerm : debouncedAdminUsersSearchTerm
+  }
 
   // Format date for display
   const formatDate = (dateString) => {
@@ -399,8 +526,183 @@ export default function AdminDashboard() {
     }).format(date)
   }
 
-  // Render loading skeletons
-  if (loading && users.length === 0) {
+  // Render user table rows
+  const renderUserRows = (users, isLoading) => {
+    if (isLoading) {
+      return [...Array(5)].map((_, index) => (
+        <TableRow key={`skeleton-${index}`}>
+          <TableCell>
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-8 h-8 rounded-full" />
+              <div className="flex flex-col gap-1">
+                <Skeleton className="w-24 h-4" />
+                <Skeleton className="w-32 h-3" />
+              </div>
+            </div>
+          </TableCell>
+          <TableCell>
+            <Skeleton className="w-16 h-4" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="w-20 h-4" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="w-24 h-4" />
+          </TableCell>
+          <TableCell className="text-right">
+            <Skeleton className="w-8 h-8 ml-auto" />
+          </TableCell>
+        </TableRow>
+      ))
+    }
+
+    if (users.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={5} className="h-24 text-center">
+            {getCurrentDebouncedSearchTerm() || (activeTab === "all-users" && roleFilter !== "all")
+              ? "No users found matching your search criteria."
+              : activeTab === "admin-users"
+                ? "No admin users found."
+                : "No users found."}
+          </TableCell>
+        </TableRow>
+      )
+    }
+
+    return (
+      <AnimatePresence>
+        {users.map((user, index) => (
+          <motion.tr
+            key={user.license}
+            custom={index}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={tableRowVariants}
+            className="group"
+          >
+            <TableCell>
+              <div className="flex items-center gap-3">
+                <Avatar className="w-8 h-8">
+                  <AvatarImage src={user.image || "/placeholder.svg?height=32&width=32"} alt={user.username} />
+                  <AvatarFallback>{user.username.substring(0, 2).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col">
+                  <span className="font-medium">{user.username}</span>
+                  <span className="text-xs text-muted-foreground">{user.email}</span>
+                </div>
+              </div>
+            </TableCell>
+            <TableCell>{user.license}</TableCell>
+            <TableCell>
+              <div className="flex flex-wrap gap-1">
+                {user.roles.slice(0, 2).map((role, i) => (
+                  <Badge key={i} variant="secondary" className="text-xs">
+                    {role}
+                  </Badge>
+                ))}
+                {user.roles.length > 2 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{user.roles.length - 2}
+                  </Badge>
+                )}
+              </div>
+            </TableCell>
+            <TableCell>
+              <span className="text-sm">{formatDate(user.createdAt)}</span>
+            </TableCell>
+            <TableCell className="text-right">
+              <div className="flex justify-end">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="w-8 h-8">
+                      <MoreHorizontal className="w-4 h-4" />
+                      <span className="sr-only">Open menu</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link to={`/admin/edit-user/${user.license}`} className="cursor-pointer">
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit User
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-red-600 focus:text-red-600"
+                      onClick={() => {
+                        if (window.confirm(`Are you sure you want to delete ${user.username}?`)) {
+                          handleDelete(user.license)
+                        }
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete User
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </TableCell>
+          </motion.tr>
+        ))}
+      </AnimatePresence>
+    )
+  }
+
+  // Render pagination
+  const renderPagination = (currentPage, totalPages, setCurrentPage, totalCount, isLoading) => {
+    if (totalPages <= 1) return null
+
+    return (
+      <Pagination>
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1 || isLoading}
+            />
+          </PaginationItem>
+          {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+            const pageNum = i + 1
+            return (
+              <PaginationItem key={pageNum}>
+                <PaginationLink
+                  onClick={() => setCurrentPage(pageNum)}
+                  isActive={currentPage === pageNum}
+                  disabled={isLoading}
+                >
+                  {pageNum}
+                </PaginationLink>
+              </PaginationItem>
+            )
+          })}
+          {totalPages > 5 && currentPage < totalPages - 2 && (
+            <>
+              <PaginationItem>
+                <span className="px-3 py-2 text-sm">...</span>
+              </PaginationItem>
+              <PaginationItem>
+                <PaginationLink onClick={() => setCurrentPage(totalPages)} disabled={isLoading}>
+                  {totalPages}
+                </PaginationLink>
+              </PaginationItem>
+            </>
+          )}
+          <PaginationItem>
+            <PaginationNext
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages || isLoading}
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
+    )
+  }
+
+  // Render loading skeletons for initial load
+  if (loading && allUsers.length === 0 && activeTab === "all-users") {
     return (
       <div className="container p-6 mx-auto">
         <div className="flex items-center justify-between mb-6">
@@ -408,7 +710,8 @@ export default function AdminDashboard() {
           <Skeleton className="h-10 w-[150px]" />
         </div>
 
-        <div className="grid grid-cols-1 gap-6 mb-6 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 mb-6 sm:grid-cols-4">
+          <Skeleton className="h-[100px]" />
           <Skeleton className="h-[100px]" />
           <Skeleton className="h-[100px]" />
           <Skeleton className="h-[100px]" />
@@ -467,17 +770,16 @@ export default function AdminDashboard() {
                   </DialogHeader>
 
                   <form onSubmit={handleCreateUser} className="py-4 space-y-4">
-                   
-                      <div className="space-y-2">
-                        <Label htmlFor="username">Username</Label>
-                        <Input
-                          id="username"
-                          name="username"
-                          placeholder="e.g., johndoe"
-                          value={newUserData.username}
-                          onChange={handleInputChange}
-                          required
-                        />
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username</Label>
+                      <Input
+                        id="username"
+                        name="username"
+                        placeholder="e.g., johndoe"
+                        value={newUserData.username}
+                        onChange={handleInputChange}
+                        required
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -614,24 +916,26 @@ export default function AdminDashboard() {
 
                     <div className="space-y-2">
                       <Label>Assign Roles</Label>
-                      <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto p-2 border rounded-md">
+                      <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto p-2 border rounded-md">
                         {Object.entries(roleCategories).map(([category, roles]) => (
                           <div key={category} className="space-y-1">
                             <p className="text-xs font-medium text-muted-foreground">{category}</p>
-                            {roles.map((role) => (
-                              <div key={role} className="flex items-center">
-                                <input
-                                  type="checkbox"
-                                  id={`role-${role}`}
-                                  checked={newUserData.roles.includes(role)}
-                                  onChange={() => toggleRole(role)}
-                                  className="w-4 h-4 mr-2 border-gray-300 rounded text-primary focus:ring-primary"
-                                />
-                                <Label htmlFor={`role-${role}`} className="text-sm cursor-pointer">
-                                  {role}
-                                </Label>
-                              </div>
-                            ))}
+                            <div className="grid grid-cols-1 gap-1">
+                              {roles.map((role) => (
+                                <div key={role} className="flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    id={`role-${role}`}
+                                    checked={newUserData.roles.includes(role)}
+                                    onChange={() => toggleRole(role)}
+                                    className="w-4 h-4 mr-2 border-gray-300 rounded text-primary focus:ring-primary"
+                                  />
+                                  <Label htmlFor={`role-${role}`} className="text-sm cursor-pointer">
+                                    {role}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -663,7 +967,7 @@ export default function AdminDashboard() {
             variants={staggerContainer}
             initial="hidden"
             animate="visible"
-            className="grid grid-cols-1 gap-4 sm:grid-cols-3"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-4"
           >
             <motion.div variants={slideUp}>
               <Card>
@@ -672,9 +976,17 @@ export default function AdminDashboard() {
                   <Users className="w-4 h-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{users.length}</div>
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? <Skeleton className="w-16 h-8" /> : userStats.totalUsers}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    {users.length > 0 ? `${recentUsers.length} recently added` : "No users"}
+                    {statsLoading ? (
+                      <Skeleton className="w-24 h-3" />
+                    ) : userStats.totalUsers > 0 ? (
+                      `${userStats.recentlyAdded} recently added`
+                    ) : (
+                      "No users"
+                    )}
                   </p>
                 </CardContent>
               </Card>
@@ -687,9 +999,40 @@ export default function AdminDashboard() {
                   <CheckCircle className="w-4 h-4 text-green-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{adminUsers}</div>
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? <Skeleton className="w-16 h-8" /> : userStats.adminUsers}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    {users.length > 0 ? `${Math.round((adminUsers / users.length) * 100)}% of total users` : "No users"}
+                    {statsLoading ? (
+                      <Skeleton className="w-24 h-3" />
+                    ) : userStats.totalUsers > 0 ? (
+                      `${Math.round((userStats.adminUsers / userStats.totalUsers) * 100)}% of total users`
+                    ) : (
+                      "No users"
+                    )}
+                  </p>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div variants={slideUp}>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Manager Users</CardTitle>
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? <Skeleton className="w-16 h-8" /> : userStats.managerUsers}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {statsLoading ? (
+                      <Skeleton className="w-24 h-3" />
+                    ) : userStats.totalUsers > 0 ? (
+                      `${Math.round((userStats.managerUsers / userStats.totalUsers) * 100)}% of total users`
+                    ) : (
+                      "No users"
+                    )}
                   </p>
                 </CardContent>
               </Card>
@@ -699,14 +1042,20 @@ export default function AdminDashboard() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Customer Users</CardTitle>
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  <Users className="w-4 h-4 text-blue-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{customerUsers}</div>
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? <Skeleton className="w-16 h-8" /> : userStats.customerUsers}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    {users.length > 0
-                      ? `${Math.round((customerUsers / users.length) * 100)}% of total users`
-                      : "No users"}
+                    {statsLoading ? (
+                      <Skeleton className="w-24 h-3" />
+                    ) : userStats.totalUsers > 0 ? (
+                      `${Math.round((userStats.customerUsers / userStats.totalUsers) * 100)}% of total users`
+                    ) : (
+                      "No users"
+                    )}
                   </p>
                 </CardContent>
               </Card>
@@ -714,11 +1063,16 @@ export default function AdminDashboard() {
           </motion.div>
 
           {/* Tabs and filters */}
-          <Tabs defaultValue="all-users" value={activeTab} onValueChange={setActiveTab}>
+          <Tabs defaultValue="all-users" value={activeTab} onValueChange={handleTabChange}>
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <TabsList>
-                <TabsTrigger value="all-users">All Users</TabsTrigger>
-                <TabsTrigger value="admin-users">Admins</TabsTrigger>
+                <TabsTrigger value="all-users">
+                  All Users ({allUsersTotalCount})
+                  {(debouncedAllUsersSearchTerm || roleFilter !== "all") && " - Filtered"}
+                </TabsTrigger>
+                <TabsTrigger value="admin-users">
+                  Admins ({adminUsersTotalCount}){debouncedAdminUsersSearchTerm && " - Filtered"}
+                </TabsTrigger>
               </TabsList>
 
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -726,33 +1080,92 @@ export default function AdminDashboard() {
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="search"
-                    placeholder="Search users..."
-                    className="w-full pl-9 sm:w-[200px] md:w-[250px]"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder={
+                      activeTab === "all-users" ? "Search all users in database..." : "Search admin users..."
+                    }
+                    className="w-full pl-9 pr-10 sm:w-[250px] md:w-[300px]"
+                    value={getCurrentSearchTerm()}
+                    onChange={(e) => {
+                      if (activeTab === "all-users") {
+                        setAllUsersSearchTerm(e.target.value)
+                      } else {
+                        setAdminUsersSearchTerm(e.target.value)
+                      }
+                    }}
                   />
+                  {(getCurrentSearchTerm() || isSearching) && (
+                    <div className="absolute right-2.5 top-2.5">
+                      {isSearching ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeTab === "all-users") {
+                              setAllUsersSearchTerm("")
+                            } else {
+                              setAdminUsersSearchTerm("")
+                            }
+                          }}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue placeholder="Filter by role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Roles</SelectItem>
-                    {allRoles.map((role) => (
-                      <SelectItem key={role} value={role}>
-                        {role}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {activeTab === "all-users" && (
+                  <Select value={roleFilter} onValueChange={setRoleFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Filter by role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Roles</SelectItem>
+                      {allRoles.map((role) => (
+                        <SelectItem key={role} value={role}>
+                          {role}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
 
-                <Button variant="outline" className="ml-auto bg-transparent" onClick={handleRefresh}>
-                  <Filter className="w-4 h-4 mr-2" />
+                {((activeTab === "all-users" && (debouncedAllUsersSearchTerm || roleFilter !== "all")) ||
+                  (activeTab === "admin-users" && debouncedAdminUsersSearchTerm)) && (
+                  <Button
+                    variant="outline"
+                    onClick={activeTab === "all-users" ? clearAllUsersSearch : clearAdminUsersSearch}
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Clear Filters
+                  </Button>
+                )}
+
+                <Button variant="outline" className="bg-transparent" onClick={handleRefresh}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
                   Refresh
                 </Button>
               </div>
             </div>
+
+            {/* Search/Filter status */}
+            {((activeTab === "all-users" && (debouncedAllUsersSearchTerm || roleFilter !== "all")) ||
+              (activeTab === "admin-users" && debouncedAdminUsersSearchTerm)) && (
+              <Alert className="border-blue-200 bg-blue-50">
+                <Info className="w-4 h-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  {activeTab === "all-users"
+                    ? debouncedAllUsersSearchTerm && roleFilter !== "all"
+                      ? `Showing results for "${debouncedAllUsersSearchTerm}" with role "${roleFilter}" - ${allUsersTotalCount} users found`
+                      : debouncedAllUsersSearchTerm
+                        ? `Showing search results for "${debouncedAllUsersSearchTerm}" - ${allUsersTotalCount} users found`
+                        : `Showing users with role "${roleFilter}" - ${allUsersTotalCount} users found`
+                    : `Showing admin search results for "${debouncedAdminUsersSearchTerm}" - ${adminUsersTotalCount} admins found`}
+                </AlertDescription>
+              </Alert>
+            )}
 
             {error && (
               <Alert variant="destructive" className="mt-4">
@@ -774,156 +1187,21 @@ export default function AdminDashboard() {
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
-                      {loading ? (
-                        // Show skeletons while loading
-                        [...Array(5)].map((_, index) => (
-                          <TableRow key={`skeleton-${index}`}>
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                <Skeleton className="w-8 h-8 rounded-full" />
-                                <div className="flex flex-col gap-1">
-                                  <Skeleton className="w-24 h-4" />
-                                  <Skeleton className="w-32 h-3" />
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="w-16 h-4" />
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="w-20 h-4" />
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="w-24 h-4" />
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Skeleton className="w-8 h-8 ml-auto" />
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ) : filteredUsers.length > 0 ? (
-                        <AnimatePresence>
-                          {filteredUsers.map((user, index) => (
-                            <motion.tr
-                              key={user.license}
-                              custom={index}
-                              initial="hidden"
-                              animate="visible"
-                              exit="exit"
-                              variants={tableRowVariants}
-                              className="group"
-                            >
-                              <TableCell>
-                                <div className="flex items-center gap-3">
-                                  <Avatar className="w-8 h-8">
-                                    <AvatarImage
-                                      src={user.image || "/placeholder.svg?height=32&width=32"}
-                                      alt={user.username}
-                                    />
-                                    <AvatarFallback>{user.username.substring(0, 2).toUpperCase()}</AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{user.username}</span>
-                                    <span className="text-xs text-muted-foreground">{user.email}</span>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>{user.license}</TableCell>
-                              <TableCell>
-                                <div className="flex flex-wrap gap-1">
-                                  {user.roles.slice(0, 2).map((role, i) => (
-                                    <Badge key={i} variant="secondary" className="text-xs">
-                                      {role}
-                                    </Badge>
-                                  ))}
-                                  {user.roles.length > 2 && (
-                                    <Badge variant="outline" className="text-xs">
-                                      +{user.roles.length - 2}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <span className="text-sm">{formatDate(user.createdAt)}</span>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="w-8 h-8">
-                                        <MoreHorizontal className="w-4 h-4" />
-                                        <span className="sr-only">Open menu</span>
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem asChild>
-                                        <Link to={`/admin/edit-user/${user.license}`} className="cursor-pointer">
-                                          <Edit className="w-4 h-4 mr-2" />
-                                          Edit User
-                                        </Link>
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        className="text-red-600 focus:text-red-600"
-                                        onClick={() => {
-                                          if (window.confirm(`Are you sure you want to delete ${user.username}?`)) {
-                                            handleDelete(user.license)
-                                          }
-                                        }}
-                                      >
-                                        <Trash2 className="w-4 h-4 mr-2" />
-                                        Delete User
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </div>
-                              </TableCell>
-                            </motion.tr>
-                          ))}
-                        </AnimatePresence>
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={5} className="h-24 text-center">
-                            No users found.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
+                    <TableBody>{renderUserRows(allUsers, loading)}</TableBody>
                   </Table>
                 </CardContent>
                 <CardFooter className="flex items-center justify-between py-4">
                   <div className="text-sm text-muted-foreground">
-                    Showing {filteredUsers.length} of {users.length} users
+                    Showing {allUsers.length} of {allUsersTotalCount} users
+                    {(debouncedAllUsersSearchTerm || roleFilter !== "all") && " (filtered)"}
                   </div>
-                  <Pagination>
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious
-                          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                          disabled={currentPage === 1 || loading}
-                        />
-                      </PaginationItem>
-                      {[...Array(totalPages)].map((_, i) => (
-                        <PaginationItem key={i + 1}>
-                          <PaginationLink
-                            onClick={() => setCurrentPage(i + 1)}
-                            isActive={currentPage === i + 1}
-                            disabled={loading}
-                          >
-                            {i + 1}
-                          </PaginationLink>
-                        </PaginationItem>
-                      ))}
-                      <PaginationItem>
-                        <PaginationNext
-                          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                          disabled={currentPage === totalPages || loading}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
+                  {renderPagination(
+                    allUsersCurrentPage,
+                    allUsersTotalPages,
+                    setAllUsersCurrentPage,
+                    allUsersTotalCount,
+                    loading,
+                  )}
                 </CardFooter>
               </Card>
             </TabsContent>
@@ -941,194 +1219,22 @@ export default function AdminDashboard() {
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
-                      <AnimatePresence>
-                        {users
-                          .filter((user) => user.roles.includes("Admin"))
-                          .map((user, index) => (
-                            <motion.tr
-                              key={user.license}
-                              custom={index}
-                              initial="hidden"
-                              animate="visible"
-                              exit="exit"
-                              variants={tableRowVariants}
-                              className="group"
-                            >
-                              <TableCell>
-                                <div className="flex items-center gap-3">
-                                  <Avatar className="w-8 h-8">
-                                    <AvatarImage
-                                      src={user.image || "/placeholder.svg?height=32&width=32"}
-                                      alt={user.username}
-                                    />
-                                    <AvatarFallback>{user.username.substring(0, 2).toUpperCase()}</AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{user.username}</span>
-                                    <span className="text-xs text-muted-foreground">{user.email}</span>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>{user.license}</TableCell>
-                              <TableCell>
-                                <div className="flex flex-wrap gap-1">
-                                  {user.roles.slice(0, 2).map((role, i) => (
-                                    <Badge key={i} variant="secondary" className="text-xs">
-                                      {role}
-                                    </Badge>
-                                  ))}
-                                  {user.roles.length > 2 && (
-                                    <Badge variant="outline" className="text-xs">
-                                      +{user.roles.length - 2}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <span className="text-sm">{formatDate(user.createdAt)}</span>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="w-8 h-8">
-                                        <MoreHorizontal className="w-4 h-4" />
-                                        <span className="sr-only">Open menu</span>
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem asChild>
-                                        <Link to={`/admin/edit-user/${user.license}`} className="cursor-pointer">
-                                          <Edit className="w-4 h-4 mr-2" />
-                                          Edit User
-                                        </Link>
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        className="text-red-600 focus:text-red-600"
-                                        onClick={() => {
-                                          if (window.confirm(`Are you sure you want to delete ${user.username}?`)) {
-                                            handleDelete(user.license)
-                                          }
-                                        }}
-                                      >
-                                        <Trash2 className="w-4 h-4 mr-2" />
-                                        Delete User
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </div>
-                              </TableCell>
-                            </motion.tr>
-                          ))}
-                      </AnimatePresence>
-                    </TableBody>
+                    <TableBody>{renderUserRows(adminUsers, adminLoading)}</TableBody>
                   </Table>
                 </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="customer-users" className="mt-6">
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>User</TableHead>
-                        <TableHead>License</TableHead>
-                        <TableHead>Roles</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <AnimatePresence>
-                        {users
-                          .filter((user) => user.roles.includes("Customer"))
-                          .map((user, index) => (
-                            <motion.tr
-                              key={user.license}
-                              custom={index}
-                              initial="hidden"
-                              animate="visible"
-                              exit="exit"
-                              variants={tableRowVariants}
-                              className="group"
-                            >
-                              <TableCell>
-                                <div className="flex items-center gap-3">
-                                  <Avatar className="w-8 h-8">
-                                    <AvatarImage
-                                      src={user.image || "/placeholder.svg?height=32&width=32"}
-                                      alt={user.username}
-                                    />
-                                    <AvatarFallback>{user.username.substring(0, 2).toUpperCase()}</AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{user.username}</span>
-                                    <span className="text-xs text-muted-foreground">{user.email}</span>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>{user.license}</TableCell>
-                              <TableCell>
-                                <div className="flex flex-wrap gap-1">
-                                  {user.roles.slice(0, 2).map((role, i) => (
-                                    <Badge key={i} variant="secondary" className="text-xs">
-                                      {role}
-                                    </Badge>
-                                  ))}
-                                  {user.roles.length > 2 && (
-                                    <Badge variant="outline" className="text-xs">
-                                      +{user.roles.length - 2}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <span className="text-sm">{formatDate(user.createdAt)}</span>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="w-8 h-8">
-                                        <MoreHorizontal className="w-4 h-4" />
-                                        <span className="sr-only">Open menu</span>
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem asChild>
-                                        <Link to={`/admin/edit-user/${user.license}`} className="cursor-pointer">
-                                          <Edit className="w-4 h-4 mr-2" />
-                                          Edit User
-                                        </Link>
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        className="text-red-600 focus:text-red-600"
-                                        onClick={() => {
-                                          if (window.confirm(`Are you sure you want to delete ${user.username}?`)) {
-                                            handleDelete(user.license)
-                                          }
-                                        }}
-                                      >
-                                        <Trash2 className="w-4 h-4 mr-2" />
-                                        Delete User
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </div>
-                              </TableCell>
-                            </motion.tr>
-                          ))}
-                      </AnimatePresence>
-                    </TableBody>
-                  </Table>
-                </CardContent>
+                <CardFooter className="flex items-center justify-between py-4">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {adminUsers.length} of {adminUsersTotalCount} admin users
+                    {debouncedAdminUsersSearchTerm && " (filtered)"}
+                  </div>
+                  {renderPagination(
+                    adminUsersCurrentPage,
+                    adminUsersTotalPages,
+                    setAdminUsersCurrentPage,
+                    adminUsersTotalCount,
+                    adminLoading,
+                  )}
+                </CardFooter>
               </Card>
             </TabsContent>
           </Tabs>
