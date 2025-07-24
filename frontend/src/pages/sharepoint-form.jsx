@@ -40,6 +40,8 @@ import { toast } from "@/hooks/use-toast"
 import { useAuth } from "../context/AuthContext"
 import MainLayout from "../components/MainLayout"
 import { cn } from "@/lib/utils"
+import { UserSelector } from "@/components/UserSelector"
+import { ManagerSelector } from "@/components/ManagerSelector"
 
 // Department options
 const DEPARTMENT_OPTIONS = [
@@ -480,177 +482,9 @@ export default function SharePointCreateEnhanced() {
   )
 
   // Enhanced User Selector with better table view
-  const UserSelector = () => (
-    <div className="space-y-4">
-      <div className="relative">
-        <Search className="absolute w-4 h-4 left-3 top-3 text-muted-foreground" />
-        <Input
-          placeholder="Search users by name, email, or role..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-
-      <div className="border rounded-lg">
-        <div className="p-4 border-b bg-muted/50">
-          <div className="flex items-center justify-between">
-            <h4 className="font-medium">Available Users ({filteredUsers.length})</h4>
-            <div className="text-sm text-muted-foreground">{selectedUsers.length} selected</div>
-          </div>
-        </div>
-
-        <ScrollArea className="h-64">
-          <div className="p-2">
-            {filteredUsers.length === 0 ? (
-              <div className="flex items-center justify-center h-32 text-muted-foreground">
-                <div className="text-center">
-                  <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>No users found</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {filteredUsers.map((user) => {
-                  const isSelected = selectedUsers.find((u) => u._id === user._id)
-                  return (
-                    <div
-                      key={user._id}
-                      className={cn(
-                        "flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors",
-                        isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50",
-                      )}
-                      onClick={() => handleUserToggle(user)}
-                    >
-                      <Checkbox
-                        checked={!!isSelected}
-                        onChange={() => handleUserToggle(user)}
-                        className="pointer-events-none"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10">
-                            <span className="text-sm font-medium text-primary">
-                              {user.username?.charAt(0)?.toUpperCase() || "U"}
-                            </span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{user.username}</p>
-                            <p className="text-xs truncate text-muted-foreground">{user.email}</p>
-                          </div>
-                        </div>
-                        {user.roles && user.roles.length > 0 && (
-                          <div className="flex gap-1 mt-2">
-                            {user.roles.slice(0, 2).map((role) => (
-                              <Badge key={role} variant="secondary" className="text-xs">
-                                {role}
-                              </Badge>
-                            ))}
-                            {user.roles.length > 2 && (
-                              <Badge variant="secondary" className="text-xs">
-                                +{user.roles.length - 2}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </ScrollArea>
-      </div>
-    </div>
-  )
-
+ 
   // Enhanced Manager Selector with better table view
-  const ManagerSelector = () => (
-    <div className="space-y-4">
-      <div className="relative">
-        <Search className="absolute w-4 h-4 left-3 top-3 text-muted-foreground" />
-        <Input
-          placeholder="Search managers by name, email, or role..."
-          value={managerSearchTerm}
-          onChange={(e) => setManagerSearchTerm(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-
-      <div className="border rounded-lg">
-        <div className="p-4 border-b bg-muted/50">
-          <div className="flex items-center justify-between">
-            <h4 className="font-medium">Available Managers ({filteredManagers.length})</h4>
-            <div className="text-sm text-muted-foreground">{selectedManager ? "1 selected" : "None selected"}</div>
-          </div>
-        </div>
-
-        <ScrollArea className="h-64">
-          <div className="p-2">
-            {filteredManagers.length === 0 ? (
-              <div className="flex items-center justify-center h-32 text-muted-foreground">
-                <div className="text-center">
-                  <Shield className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>No managers found</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {filteredManagers.map((manager) => {
-                  const isSelected = selectedManager?._id === manager._id
-                  return (
-                    <div
-                      key={manager._id}
-                      className={cn(
-                        "flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors",
-                        isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50",
-                      )}
-                      onClick={() => handleManagerSelect(manager)}
-                    >
-                      <div
-                        className={cn(
-                          "w-4 h-4 rounded-full border-2 border-primary flex items-center justify-center",
-                          isSelected ? "bg-primary" : "bg-transparent",
-                        )}
-                      >
-                        {isSelected && <div className="w-2 h-2 bg-white rounded-full" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
-                            <Shield className="w-4 h-4 text-blue-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{manager.username}</p>
-                            <p className="text-xs truncate text-muted-foreground">{manager.email}</p>
-                          </div>
-                        </div>
-                        {manager.roles && manager.roles.length > 0 && (
-                          <div className="flex gap-1 mt-2">
-                            {manager.roles.slice(0, 2).map((role) => (
-                              <Badge key={role} variant="secondary" className="text-xs">
-                                {role}
-                              </Badge>
-                            ))}
-                            {manager.roles.length > 2 && (
-                              <Badge variant="secondary" className="text-xs">
-                                +{manager.roles.length - 2}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </ScrollArea>
-      </div>
-    </div>
-  )
+ 
 
   return (
     <MainLayout>
@@ -940,7 +774,13 @@ export default function SharePointCreateEnhanced() {
                         <div className="space-y-6">
                           <div className="space-y-2">
                             <Label className="text-sm font-medium">Manager to Approve *</Label>
-                            <ManagerSelector />
+                            <ManagerSelector
+            managers={managers}
+            selectedManager={selectedManager}
+            onManagerSelect={handleManagerSelect}
+            searchTerm={managerSearchTerm}
+            setSearchTerm={setManagerSearchTerm}
+          />
                             {errors.managers && (
                               <p className="flex items-center gap-1 text-sm text-destructive">
                                 <AlertCircle className="w-3 h-3" />
@@ -999,17 +839,23 @@ export default function SharePointCreateEnhanced() {
                           </p>
                         </div>
 
-                        <div className="space-y-6">
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium">Users to Sign *</Label>
-                            <UserSelector />
-                            {errors.usersToSign && (
-                              <p className="flex items-center gap-1 text-sm text-destructive">
-                                <AlertCircle className="w-3 h-3" />
-                                {errors.usersToSign}
-                              </p>
-                            )}
-                          </div>
+                         <div className="space-y-6">
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Users to Sign *</Label>
+          <UserSelector
+            allUsers={allUsers}
+            selectedUsers={selectedUsers}
+            onUserToggle={handleUserToggle}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+          />
+          {errors.usersToSign && (
+            <p className="flex items-center gap-1 text-sm text-destructive">
+              <AlertCircle className="w-3 h-3" />
+              {errors.usersToSign}
+            </p>
+          )}
+        </div>
 
                           {/* Selected Users Display */}
                           {selectedUsers.length > 0 && (
