@@ -1,49 +1,12 @@
-// Updated adminController.js - Add dedicated admin users endpoint
-
 const bcrypt = require("bcryptjs")
 const User = require("../models/UserModel")
 const { v4: uuidv4 } = require("uuid")
+const { rolesEnum, isValidRole, getManagementRoles } = require("../constants/roles")
 
 function generateReference(prefix = "REF") {
   const uuid = uuidv4().split("-")[0]
   return `${prefix}-${uuid.toUpperCase()}`
 }
-
-const rolesEnum = [
-  "Admin",
-  "Manager",
-  "Project Manager",
-  "Business Manager",
-  "Operations director",
-  "Plant manager",
-  "Engineering Manager",
-  "Production Manager",
-  "Controlling Manager",
-  "Financial Manager",
-  "Purchasing Manager",
-  "Quality Manager",
-  "Maintenance Manager",
-  "Purchasing Manager",
-  "Logistic Manager",
-  "Human Resources Manager",
-  "Maintenance Manager",
-  "Direction Assistant",
-  "Engineering Staff",
-  "Business Staff",
-  "Production Staff",
-  "Controlling Staff",
-  "Maintenance Staff",
-  "Health & Safety Staff",
-  "Quality Manager",
-  "Purchasing Staff",
-  "Logistics Staff",
-  "Quality Staff",
-  "Human Resources Staff",
-  "Customer",
-  "User",
-  "Informatic Systems Staff",
-  "Financial Staff",
-]
 
 /**
  * 🔹 Get User Statistics (Admin Only)
@@ -57,22 +20,7 @@ exports.getUserStats = async (req, res) => {
     const adminUsers = await User.countDocuments({ roles: "Admin" })
 
     // Get manager users count (users with any manager-related role)
-    const managerRoles = [
-      "Manager",
-      "Project Manager",
-      "Business Manager",
-      "Operations director",
-      "Plant manager",
-      "Engineering Manager",
-      "Production Manager",
-      "Controlling Manager",
-      "Financial Manager",
-      "Purchasing Manager",
-      "Quality Manager",
-      "Maintenance Manager",
-      "Logistic Manager",
-      "Human Resources Manager",
-    ]
+    const managerRoles = getManagementRoles()
 
     const managerUsers = await User.countDocuments({
       roles: { $in: managerRoles },
@@ -128,8 +76,8 @@ exports.getAllUsers = async (req, res) => {
       searchQuery.$or = [{ username: searchRegex }, { email: searchRegex }, { license: searchRegex }]
     }
 
-    // Add role filter if provided
-    if (role && role !== "all" && role.trim() !== "") {
+    // Add role filter if provided and valid
+    if (role && role !== "all" && role.trim() !== "" && isValidRole(role)) {
       searchQuery.roles = role
     }
 
@@ -216,7 +164,6 @@ exports.getAdminUsers = async (req, res) => {
   }
 }
 
-// ... rest of the controller functions remain the same
 exports.getUserByLicense = async (req, res) => {
   try {
     const user = await User.findOne({ license: req.params.license }).select("-password")
@@ -236,8 +183,13 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ error: "All fields are required" })
     }
 
-    if (!Array.isArray(roles) || roles.some((role) => !rolesEnum.includes(role))) {
-      return res.status(400).json({ error: "Invalid roles provided" })
+    // Remove duplicates and validate roles
+    const uniqueRoles = [...new Set(roles)]
+    if (!Array.isArray(roles) || uniqueRoles.some((role) => !isValidRole(role))) {
+      return res.status(400).json({
+        error: "Invalid roles provided",
+        validRoles: rolesEnum,
+      })
     }
 
     const existingUser = await User.findOne({ email })
@@ -253,7 +205,7 @@ exports.createUser = async (req, res) => {
       username,
       email,
       password: hashedPassword,
-      roles,
+      roles: uniqueRoles,
       image,
     })
 
@@ -292,19 +244,24 @@ exports.adminUpdateUser = async (req, res) => {
 exports.updateUserRoles = async (req, res) => {
   const { roles } = req.body
 
-  if (!Array.isArray(roles) || roles.some((role) => !rolesEnum.includes(role))) {
-    return res.status(400).json({ error: "Invalid roles provided" })
+  // Remove duplicates and validate roles
+  const uniqueRoles = [...new Set(roles)]
+  if (!Array.isArray(roles) || uniqueRoles.some((role) => !isValidRole(role))) {
+    return res.status(400).json({
+      error: "Invalid roles provided",
+      validRoles: rolesEnum,
+    })
   }
 
   try {
     const user = await User.findOne({ license: req.params.license })
     if (!user) return res.status(404).json({ error: "User not found" })
 
-    if (user.license === req.user.license && !roles.includes("Admin")) {
+    if (user.license === req.user.license && !uniqueRoles.includes("Admin")) {
       return res.status(400).json({ error: "You cannot remove your own Admin role" })
     }
 
-    user.roles = roles
+    user.roles = uniqueRoles
     await user.save()
 
     res.json({ message: "User roles updated successfully", updatedRoles: user.roles })

@@ -1,43 +1,6 @@
 const bcrypt = require("bcryptjs")
 const User = require("../models/UserModel")
-
-// List of allowed roles
-const rolesEnum = [
-  "Admin",
-  "Manager",
-  "Project Manager",
-  "Business Manager",
-  "Operations director",
-  "Plant manager",
-  "Engineering Manager",
-  "Production Manager",
-  "Controlling Manager",
-  "Financial Manager",
-  "Purchasing Manager",
-  "Quality Manager",
-  "Maintenance Manager",
- 
-  "Purchasing Manager",
-  "Logistic Manager",
-  "Human Resources Manager",
-  "Maintenance Manager",
-  "Direction Assistant",
-  "Engineering Staff",
-  "Business Staff",
-  "Production Staff",
-  "Controlling Staff",
-  "Maintenance Staff",
-  "Health & Safety Staff",
-  "Quality Manager",
-  "Purchasing Staff",
-  "Logistics Staff",
-  "Quality Staff",
-  "Human Resources Staff",
-  "Customer",
-  "User",
-  "Informatic Systems Staff",
-  "Financial Staff",
-]
+const { rolesEnum, isValidRole } = require("../constants/roles")
 
 // Get Current User Information (Optimized)
 exports.showUserInfo = async (req, res) => {
@@ -47,11 +10,14 @@ exports.showUserInfo = async (req, res) => {
       return res.status(404).json({ error: "User not found" })
     }
 
+    // Ensure roles are unique and valid
+    const validRoles = [...new Set(req.user.roles)].filter((role) => isValidRole(role))
+
     res.json({
       license: req.user.license,
       username: req.user.username,
       email: req.user.email,
-      roles: req.user.roles,
+      roles: validRoles,
       image: req.user.image,
       createdAt: req.user.createdAt,
       updatedAt: req.user.updatedAt,
@@ -66,16 +32,20 @@ exports.showUserInfo = async (req, res) => {
 exports.updateUserRoles = async (req, res) => {
   const { roles } = req.body
 
-  // Validate roles
-  if (!Array.isArray(roles) || roles.some((role) => !rolesEnum.includes(role))) {
-    return res.status(400).json({ error: "Invalid roles provided" })
+  // Validate roles - remove duplicates and check validity
+  const uniqueRoles = [...new Set(roles)]
+  if (!Array.isArray(roles) || uniqueRoles.some((role) => !isValidRole(role))) {
+    return res.status(400).json({
+      error: "Invalid roles provided",
+      validRoles: rolesEnum,
+    })
   }
 
   try {
     // Find and update in one operation
     const user = await User.findOneAndUpdate(
       { license: req.params.license },
-      { $set: { roles } },
+      { $set: { roles: uniqueRoles } },
       { new: true, runValidators: true },
     )
 
@@ -84,7 +54,7 @@ exports.updateUserRoles = async (req, res) => {
     }
 
     // Prevent Admin from removing their own "Admin" role
-    if (user.license === req.user.license && !roles.includes("Admin")) {
+    if (user.license === req.user.license && !uniqueRoles.includes("Admin")) {
       // Revert the change
       await User.findOneAndUpdate({ license: req.params.license }, { $addToSet: { roles: "Admin" } })
       return res.status(400).json({ error: "You cannot remove your own Admin role" })

@@ -1,44 +1,8 @@
-const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+const mongoose = require("mongoose")
+const bcrypt = require("bcryptjs")
+const { rolesEnum } = require("../constants/roles")
 
-const { Schema } = mongoose;
-
-const rolesEnum = [
-  "Admin",  // ✅ Full access: Can assign roles, CRUD everything.
-  "Manager",  // ✅ Can assign roles but cannot perform full CRUD.
-  "Project Manager",
-  "Business Manager",
-  "Operations director",
-  "Plant manager",
-  "Engineering Manager",
-  "Production Manager",
-  "Controlling Manager",
-  "Financial Manager",
-  "Purchasing Manager",
-  "Quality Manager",
-  "Maintenance Manager",
-  
-  "Purchasing Manager",
-  "Logistic Manager",
-  "Human Resources Manager",
-  "Maintenance Manager",
-  "Direction Assistant",
-  "Engineering Staff",
-  "Business Staff",
-  "Production Staff",
-  "Controlling Staff",
-  "Maintenance Staff",
-  "Health & Safety Staff",
-  "Quality Manager",
-  "Purchasing Staff",
-  "Logistics Staff",
-  "Quality Staff",
-  "Human Resources Staff",
-  "Customer",
-  "User", 
-  "Informatic Systems Staff",
-  "Financial Staff" 
-];
+const { Schema } = mongoose
 
 const userSchema = new Schema(
   {
@@ -62,18 +26,25 @@ const userSchema = new Schema(
       required: true,
     },
     roles: {
-      type: [String], // ✅ Users can have multiple roles.
+      type: [String],
       enum: rolesEnum,
       required: true,
-      default: ["User"], // ✅ Change default from "user" to "User"
+      default: ["User"],
+      validate: {
+        validator: (roles) => {
+          // Ensure all roles are valid and no duplicates
+          const uniqueRoles = [...new Set(roles)]
+          return uniqueRoles.length === roles.length && uniqueRoles.every((role) => rolesEnum.includes(role))
+        },
+        message: "Invalid or duplicate roles provided",
+      },
     },
     image: {
       type: String,
       default: null,
     },
   },
-  { timestamps: true }
-);
+  { timestamps: true },
+)
 
-
-module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model("User", userSchema)

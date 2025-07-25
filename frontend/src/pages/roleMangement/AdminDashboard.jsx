@@ -104,7 +104,7 @@ const staggerContainer = {
   },
 }
 
-// Updated role categories
+// Updated role categories - CONSISTENT WITH BACKEND
 const roleCategories = {
   Management: [
     "Admin",
@@ -123,7 +123,7 @@ const roleCategories = {
     "Human Resources Manager",
     "Maintenance Manager",
   ],
-  Logistics: [
+  Staff: [
     "Direction Assistant",
     "Engineering Staff",
     "Business Staff",
