@@ -1,6 +1,6 @@
 const nodemailer = require("nodemailer")
 require("dotenv").config()
-// Create a transporter using the provided SMTP configuration
+
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: process.env.EMAIL_PORT,
@@ -11,6 +11,8 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+
+// Verify transporter connection
 transporter.verify((error, success) => {
   if (error) {
     console.error("❌ SMTP connection error:", error)
@@ -32,7 +34,7 @@ exports.sendManagerApprovalEmail = async (options) => {
       console.error(`❌ Invalid document ID in manager approval email: ${documentId}`)
       throw new Error(`Invalid document ID: ${documentId}`)
     }
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-share-point.vercel.app"
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
     const taskUrl = `${baseUrl}/sharepoint/${documentId}`
     // 🔧 DEBUG: Log the final URL
     console.log(`🔗 Manager approval email URL: ${taskUrl}`)
@@ -148,7 +150,7 @@ exports.sendUserSigningEmail = async (options) => {
       console.error(`❌ Invalid document ID in user signing email: ${documentId}`)
       throw new Error(`Invalid document ID: ${documentId}`)
     }
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-share-point.vercel.app"
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
     const taskUrl = `${baseUrl}/sharepoint/${documentId}`
     // 🔧 DEBUG: Log the final URL
     console.log(`🔗 User signing email URL: ${taskUrl}`)
@@ -256,7 +258,7 @@ exports.sendRelaunchNotificationEmail = async (options) => {
       console.error(`❌ Invalid document ID in relaunch notification email: ${documentId}`)
       throw new Error(`Invalid document ID: ${documentId}`)
     }
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-share-point.vercel.app"
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
     const documentUrl = `${baseUrl}/sharepoint/${documentId}`
     // 🔧 DEBUG: Log the final URL
     console.log(`🔗 Relaunch notification email URL: ${documentUrl}`)
@@ -323,10 +325,11 @@ exports.sendCompletionNotificationEmail = async (options) => {
       console.error(`❌ Invalid document ID in completion notification email: ${documentId}`)
       throw new Error(`Invalid document ID: ${documentId}`)
     }
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-share-point.vercel.app"
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
     const documentUrl = `${baseUrl}/sharepoint/${documentId}`
     // 🔧 DEBUG: Log the final URL
     console.log(`🔗 Completion notification email URL: ${documentUrl}`)
+
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8f9fa; padding: 20px;">
         <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
@@ -336,8 +339,25 @@ exports.sendCompletionNotificationEmail = async (options) => {
           </div>
           <p style="font-size: 16px; color: #333;">Dear <strong>${username}</strong>,</p>
           <p style="font-size: 14px; color: #666; line-height: 1.6;">
-            Congratulations! Your SharePoint document "<strong>${documentTitle}</strong>" has been fully approved by all assigned users and is now complete.
+            Congratulations! Your SharePoint document has been fully approved by all assigned users and is now complete.
           </p>
+          <div style="background-color: #f3e8ff; padding: 25px; border-radius: 8px; margin: 25px 0;">
+            <h3 style="color: #6b21a8; margin-top: 0; font-size: 18px;">📋 Document Details</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #333; width: 120px;">Title:</td>
+                <td style="padding: 8px 0; color: #666;">${documentTitle}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #333;">Status:</td>
+                <td style="padding: 8px 0; color: #16a34a; font-weight: bold;">Completed</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #333;">Document ID:</td>
+                <td style="padding: 8px 0; color: #666; font-family: monospace;">${documentId}</td>
+              </tr>
+            </table>
+          </div>
           <div style="background-color: #f3e8ff; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 5px solid #8b5cf6;">
             <h3 style="color: #6b21a8; margin: 0 0 10px 0;">✨ Status: Completed</h3>
             <p style="color: #6b21a8; margin: 0;">All required approvals have been obtained. The document is ready for final processing.</p>
@@ -389,7 +409,7 @@ exports.sendExpirationNotificationEmail = async (options) => {
       console.error(`❌ Invalid document ID in expiration notification email: ${documentId}`)
       throw new Error(`Invalid document ID: ${documentId}`)
     }
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-share-point.vercel.app"
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
     const documentUrl = `${baseUrl}/sharepoint/${documentId}`
     // 🔧 DEBUG: Log the final URL
     console.log(`🔗 Expiration notification email URL: ${documentUrl}`)

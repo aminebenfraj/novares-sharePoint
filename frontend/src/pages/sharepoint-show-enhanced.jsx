@@ -40,7 +40,6 @@ import {
   XCircle,
   AlertCircle,
   Timer,
-  ExternalLink,
   RefreshCw,
   SortAsc,
   SortDesc,
@@ -796,6 +795,13 @@ export default function SharePointShow() {
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleViewDetail(sharePoint._id)}
+                                    className="text-white bg-yellow-500 hover:bg-yellow-600"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
                                   {canApprove && !isExpired && (
                                     <div className="flex gap-1">
                                       <Dialog>
@@ -1008,10 +1014,6 @@ export default function SharePointShow() {
                                       </div>
                                     )}
 
-                                  <Button variant="outline" size="sm" onClick={() => handleViewDetail(sharePoint._id)}>
-                                    <Eye className="w-4 h-4" />
-                                  </Button>
-
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button variant="ghost" size="sm" className="w-8 h-8 p-0">
@@ -1019,12 +1021,6 @@ export default function SharePointShow() {
                                       </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
-                                      <DropdownMenuItem asChild>
-                                        <a href={sharePoint.link} target="_blank" rel="noopener noreferrer">
-                                          <ExternalLink className="w-4 h-4 mr-2" />
-                                          Open Document
-                                        </a>
-                                      </DropdownMenuItem>
                                       {canEdit && (
                                         <>
                                           <DropdownMenuSeparator />
