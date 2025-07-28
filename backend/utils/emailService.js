@@ -33,7 +33,7 @@ exports.sendManagerApprovalEmail = async (options) => {
       console.error(`❌ Invalid document ID in manager approval email: ${documentId}`)
       throw new Error(`Invalid document ID: ${documentId}`)
     }
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-share-point.vercel.app"
     const taskUrl = `${baseUrl}/sharepoint/${documentId}`
     // 🔧 DEBUG: Log the final URL
     console.log(`🔗 Manager approval email URL: ${taskUrl}`)
@@ -149,7 +149,7 @@ exports.sendUserSigningEmail = async (options) => {
       console.error(`❌ Invalid document ID in user signing email: ${documentId}`)
       throw new Error(`Invalid document ID: ${documentId}`)
     }
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-share-point.vercel.app"
     const taskUrl = `${baseUrl}/sharepoint/${documentId}`
     // 🔧 DEBUG: Log the final URL
     console.log(`🔗 User signing email URL: ${taskUrl}`)
@@ -257,7 +257,7 @@ exports.sendRelaunchNotificationEmail = async (options) => {
       console.error(`❌ Invalid document ID in relaunch notification email: ${documentId}`)
       throw new Error(`Invalid document ID: ${documentId}`)
     }
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-share-point.vercel.app"
     const documentUrl = `${baseUrl}/sharepoint/${documentId}`
     // 🔧 DEBUG: Log the final URL
     console.log(`🔗 Relaunch notification email URL: ${documentUrl}`)
@@ -324,7 +324,7 @@ exports.sendCompletionNotificationEmail = async (options) => {
       console.error(`❌ Invalid document ID in completion notification email: ${documentId}`)
       throw new Error(`Invalid document ID: ${documentId}`)
     }
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-share-point.vercel.app"
     const documentUrl = `${baseUrl}/sharepoint/${documentId}`
     // 🔧 DEBUG: Log the final URL
     console.log(`🔗 Completion notification email URL: ${documentUrl}`)
@@ -390,7 +390,7 @@ exports.sendExpirationNotificationEmail = async (options) => {
       console.error(`❌ Invalid document ID in expiration notification email: ${documentId}`)
       throw new Error(`Invalid document ID: ${documentId}`)
     }
-    const baseUrl = process.env.FRONTEND_URL || "https://novares-sharepoint.onrender.com"
+    const baseUrl = process.env.FRONTEND_URL || "https://novares-share-point.vercel.app"
     const documentUrl = `${baseUrl}/sharepoint/${documentId}`
     // 🔧 DEBUG: Log the final URL
     console.log(`🔗 Expiration notification email URL: ${documentUrl}`)
